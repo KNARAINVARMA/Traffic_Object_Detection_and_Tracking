@@ -1,0 +1,12 @@
+frame,v1_id,v1_class,v2_id,v2_class,conflict_world_x,conflict_world_y,conflict_px_x,conflict_px_y,aggressor_id,passive_id,angular_says,ttc_says,methods_agree,ttc1_sec,ttc2_sec
+204,480,two wheeler,858,two wheeler,34.3172,27.1955,686.3,543.9,858,480,uncertain,v2,True,4.613,3.66
+275,2,hatchback,3905,two wheeler,33.3935,23.1498,667.9,463.0,2,3905,v1,v2,False,0.216,0.069
+448,2732,suv,3353,two wheeler,53.3845,38.5056,1067.7,770.1,2732,3353,uncertain,v1,True,2.186,3.185
+700,8326,three wheeler,9131,two wheeler,44.5241,25.6775,890.5,513.5,9131,8326,uncertain,v2,True,1.752,0.753
+962,9730,two wheeler,11824,two wheeler,51.3738,32.5272,1027.5,650.5,11824,9730,uncertain,v2,True,2.278,1.611
+1140,13141,lcv,14878,two wheeler,34.4756,22.5367,689.5,450.7,13141,14878,uncertain,v1,True,6.219,6.999
+1204,14164,sedan,15461,three wheeler,54.2965,36.549,1085.9,731.0,14164,15461,uncertain,v1,True,5.611,6.602
+1206,11571,suv,14824,lcv,36.6811,26.1442,733.6,522.9,14824,11571,uncertain,v2,True,6.459,5.503
+1342,15938,two wheeler,16465,two wheeler,41.2353,31.769,824.7,635.4,16465,15938,uncertain,v2,True,4.806,4.795
+1454,16479,three wheeler,18639,two wheeler,53.8259,29.9527,1076.5,599.1,18639,16479,uncertain,v2,True,3.615,2.664
+1722,20045,suv,20633,suv,35.3999,23.5632,708.0,471.3,20633,20045,uncertain,v2,True,4.816,4.038
