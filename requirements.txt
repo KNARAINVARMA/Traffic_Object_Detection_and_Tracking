@@ -1,0 +1,21 @@
+# Core ML / Vision
+ultralytics>=8.0.0          # YOLOv8 detection + built-in model weights
+torch>=2.0.0                # PyTorch deep learning framework
+torchvision>=0.15.0         # Torchvision utilities (used by ultralytics)
+
+# Computer Vision
+opencv-python>=4.8.0        # Frame I/O, Kalman filter, drawing utilities
+
+# Numerical
+numpy>=1.24.0               # Array operations throughout the pipeline
+scipy>=1.10.0               # linear_sum_assignment for Hungarian matching
+
+# Progress / CLI
+tqdm>=4.65.0                # Progress bar for frame-level loop
+
+# Data export
+pandas>=2.0.0               # Optional: post-processing / analysis of output CSV
+
+# SAHI & Supervision additions
+sahi>=0.11.14
+supervision>=0.20.0

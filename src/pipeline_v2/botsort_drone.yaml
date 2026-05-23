@@ -1,0 +1,12 @@
+tracker_type: botsort
+track_high_thresh: 0.15       # lower = detect more vehicles
+track_low_thresh: 0.05        # aggressive occlusion recovery
+new_track_thresh: 0.15
+track_buffer: 60              # keep lost tracks for 2 sec (60 frames @ 30fps)
+match_thresh: 0.8
+fuse_score: True
+gmc_method: sparseOptFlow     # compensates for any drone drift/sway
+proximity_thresh: 0.5
+appearance_thresh: 0.8
+with_reid: False
+model: auto

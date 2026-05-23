@@ -1,0 +1,6 @@
+frame,v1_id,v1_class,v2_id,v2_class,conflict_world_x,conflict_world_y,conflict_px_x,conflict_px_y,aggressor_id,passive_id,angular_says,ttc_says,methods_agree,ttc1_sec,ttc2_sec
+24,6,car,19,car,35.5498,27.2558,711.0,545.1,6,19,uncertain,v1,True,0.618,inf
+35,6,car,22,car,35.0165,26.5313,700.3,530.6,6,22,uncertain,v1,True,1.591,inf
+49,2,car,6,car,32.1804,23.1523,643.6,463.0,2,6,v1,v1,True,1.348,4.187
+125,6,car,26,car,32.6947,24.1513,653.9,483.0,6,26,uncertain,v1,True,0.615,1.691
+243,30,car,44,car,31.8821,27.7524,637.6,555.0,30,44,uncertain,v1,True,0.6,inf
