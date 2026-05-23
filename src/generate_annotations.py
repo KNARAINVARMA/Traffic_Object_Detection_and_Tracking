@@ -83,6 +83,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable DEBUG-level logging.",
     )
 
+    # ---- Vehicle Class Postprocessing --------------------------------------
+    p.add_argument("--truck-conf-thresh", type=float, default=0.55,
+                   help="Confidence threshold for truck detections.")
+    p.add_argument("--truck-min-area", type=float, default=8000.0,
+                   help="Minimum bounding box area (in pixels) for trucks.")
+    p.add_argument("--truck-min-width", type=float, default=120.0,
+                   help="Minimum bounding box width (in pixels) for trucks.")
+    p.add_argument("--truck-min-height", type=float, default=50.0,
+                   help="Minimum bounding box height (in pixels) for trucks.")
+    p.add_argument("--bus-conf-thresh", type=float, default=0.30,
+                   help="Confidence threshold for bus detections.")
+    p.add_argument("--car-conf-thresh", type=float, default=0.25,
+                   help="Confidence threshold for car/relabel detections.")
+    p.add_argument("--debug-trucks", action="store_true",
+                   help="Enable saving cropped truck detections for manual debugging.")
+
     return p
 
 
@@ -148,6 +164,18 @@ def run_annotation(args: argparse.Namespace) -> None:
     t_start = time.perf_counter()
     processed_count = 0
 
+    postprocess_stats = {
+        "car_detections": 0,
+        "truck_detections": 0,
+        "truck_to_car_relabels": 0,
+        "truck_filtered_out": 0,
+        "raw_truck_predictions": 0,
+        "bus_detections": 0,
+        "bus_filtered_out": 0,
+        "person_detections": 0,
+        "motorcycle_detections": 0,
+    }
+
     try:
         with tqdm(total=total_frames, unit="frame", desc="Exporting Annotations") as pbar:
             while processed_count < total_frames:
@@ -157,6 +185,22 @@ def run_annotation(args: argparse.Namespace) -> None:
 
                 # 1. Run inference
                 detections = detector.detect(frame)
+
+                # Apply class-aware postprocessing
+                from postprocess_vehicle_classes import postprocess_vehicle_detections
+                detections = postprocess_vehicle_detections(
+                    detections           = detections,
+                    frame                = frame,
+                    frame_idx            = processed_count,
+                    truck_conf_thresh    = args.truck_conf_thresh,
+                    truck_min_area       = args.truck_min_area,
+                    truck_min_width      = args.truck_min_width,
+                    truck_min_height     = args.truck_min_height,
+                    bus_conf_thresh      = args.bus_conf_thresh,
+                    car_conf_thresh      = args.car_conf_thresh,
+                    debug_trucks         = args.debug_trucks,
+                    stats                = postprocess_stats,
+                )
 
                 # 2. Save frame image
                 frame_name = f"frame_{processed_count:06d}"
@@ -200,6 +244,13 @@ def run_annotation(args: argparse.Namespace) -> None:
             writer.release()
 
     elapsed = time.perf_counter() - t_start
+    
+    raw_trucks = postprocess_stats.get("raw_truck_predictions", 0)
+    trucks_filtered_out = postprocess_stats.get("truck_filtered_out", 0)
+    trucks_relabeled = postprocess_stats.get("truck_to_car_relabels", 0)
+    total_trucks_filtered = trucks_filtered_out + trucks_relabeled
+    filtered_pct = (total_trucks_filtered / raw_trucks * 100.0) if raw_trucks > 0 else 0.0
+
     logger.info(
         "Finished exporting annotations in %.2f seconds (%.2f fps). Frames saved to %s, annotations saved to %s.",
         elapsed,
@@ -207,6 +258,15 @@ def run_annotation(args: argparse.Namespace) -> None:
         frames_dir,
         annotations_dir,
     )
+
+    print("\n" + "=" * 56)
+    print("  POSTPROCESSING SUMMARY")
+    print("=" * 56)
+    print(f"  Car Detections:             {postprocess_stats.get('car_detections', 0)}")
+    print(f"  Truck Detections:           {postprocess_stats.get('truck_detections', 0)}")
+    print(f"  Truck->Car Relabels:        {postprocess_stats.get('truck_to_car_relabels', 0)}")
+    print(f"  Truck Predictions Filtered: {filtered_pct:.2f}% (raw: {raw_trucks}, filtered: {trucks_filtered_out}, relabeled: {trucks_relabeled})")
+    print("=" * 56 + "\n")
 
 
 def main() -> None:
