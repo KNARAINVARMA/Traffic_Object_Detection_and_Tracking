@@ -33,6 +33,8 @@ def postprocess_vehicle_detections(
     truck_min_height: float = 50.0,
     bus_conf_thresh: float = 0.30,
     car_conf_thresh: float = 0.25,
+    person_conf_thresh: float = 0.25,
+    motorcycle_conf_thresh: float = 0.15,
     debug_trucks: bool = False,
     stats: Optional[Dict] = None,
 ) -> List[Dict]:
@@ -49,6 +51,8 @@ def postprocess_vehicle_detections(
         truck_min_height: Minimum bbox height for keeping a truck detection.
         bus_conf_thresh: Confidence threshold for keeping a bus detection.
         car_conf_thresh: Confidence threshold for keeping a car detection.
+        person_conf_thresh: Confidence threshold for keeping a person detection.
+        motorcycle_conf_thresh: Confidence threshold for keeping a motorcycle detection.
         debug_trucks: If True, save cropped truck detections to outputs/debug/truck_detections/
         stats: Mutable dictionary to update global run statistics.
 
@@ -149,13 +153,23 @@ def postprocess_vehicle_detections(
         # -------------------------------------------------------------------
         # Other classes (person, car, motorcycle)
         # -------------------------------------------------------------------
-        postprocessed.append(det)
-        if stats is not None:
-            if class_id == CAR_CLASS_ID:
-                stats["car_detections"] = stats.get("car_detections", 0) + 1
-            elif class_id == 0:
+        if class_id == 0:  # person
+            if confidence < person_conf_thresh:
+                continue
+            postprocessed.append(det)
+            if stats is not None:
                 stats["person_detections"] = stats.get("person_detections", 0) + 1
-            elif class_id == 3:
+        elif class_id == 3:  # motorcycle
+            if confidence < motorcycle_conf_thresh:
+                continue
+            postprocessed.append(det)
+            if stats is not None:
                 stats["motorcycle_detections"] = stats.get("motorcycle_detections", 0) + 1
+        elif class_id == CAR_CLASS_ID:
+            if confidence < car_conf_thresh:
+                continue
+            postprocessed.append(det)
+            if stats is not None:
+                stats["car_detections"] = stats.get("car_detections", 0) + 1
 
     return postprocessed

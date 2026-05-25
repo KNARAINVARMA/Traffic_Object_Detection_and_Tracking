@@ -84,6 +84,7 @@ class Exporter:
         self.fps               = fps
         self.draw_trajectories = draw_trajectories
         self.trajectory_length = trajectory_length
+        self.frame_size        = frame_size
 
         # ------- CSV writer --------------------------------------------------
         Path(output_csv_path).parent.mkdir(parents=True, exist_ok=True)
@@ -109,6 +110,15 @@ class Exporter:
         self._traj_buffers: Dict[int, deque] = defaultdict(
             lambda: deque(maxlen=trajectory_length)
         )
+        # {track_id: deque[float]} — confidence score history
+        self._conf_histories: Dict[int, deque] = defaultdict(
+            lambda: deque(maxlen=5)
+        )
+
+        # ------- Failure Clip Recording States -------------------------------
+        self._frame_ring: deque[Tuple[int, np.ndarray]] = deque(maxlen=30)
+        self._failure_writers: List[Dict] = []
+        self._active_motorcycle_tracks: Dict[int, int] = {}  # {track_id: age}
 
         # Summary counters
         self._total_rows = 0
@@ -132,11 +142,16 @@ class Exporter:
                        Required keys:
                          track_id, bbox, center, class_name,
                          confidence, world_x, world_y, smoothed_cx, smoothed_cy
+                         last_reactivated_frame (optional)
 
         Returns:
             Annotated BGR image (same size as *frame*).
         """
+        # Save raw frame copy to ring buffer for failure clip compiling
+        self._frame_ring.append((frame_idx, frame.copy()))
+        
         annotated = frame.copy()
+        current_motorcycle_ids: Dict[int, int] = {}
 
         for t in tracks:
             tid        = t["track_id"]
@@ -145,6 +160,7 @@ class Exporter:
             wx, wy     = t["world_x"], t["world_y"]
             conf       = t["confidence"]
             cls_name   = t["class_name"]
+            track_age  = t.get("tracklet_len", 1)
 
             # ---- velocity ---------------------------------------------------
             vel_ms = 0.0
@@ -173,31 +189,158 @@ class Exporter:
             self._csv_writer.writerow(row)
             self._total_rows += 1
 
-            # ---- trajectory buffer ------------------------------------------
+            # ---- trajectory and confidence buffer ---------------------------
             self._traj_buffers[tid].append((int(s_cx), int(s_cy)))
+            self._conf_histories[tid].append(conf)
+
+            # ---- track status & color coding --------------------------------
+            status = "stable"
+            color = CLASS_COLORS.get(cls_name, (200, 200, 200))
+            
+            if cls_name == "motorcycle":
+                current_motorcycle_ids[tid] = track_age
+                last_reactivated = t.get("last_reactivated_frame", -1)
+                
+                # Classify status
+                if last_reactivated != -1 and (frame_idx - last_reactivated) < 15:
+                    status = "recovered"
+                    color = (255, 255, 0)  # Bright Cyan for recovered tracks
+                    
+                    # Trigger Reconnection Failure debug clip on first detection frame
+                    if frame_idx == last_reactivated:
+                        self._trigger_failure_clip(frame_idx, tid, "reconnection_recovery")
+                elif track_age <= 15:
+                    status = "new"
+                    color = (255, 0, 255)  # Bright Magenta for newly assigned IDs
+                else:
+                    status = "stable"
+                    color = (0, 165, 255)  # Golden orange for stable motorcycles
 
             # ---- draw trajectory polyline -----------------------------------
             if self.draw_trajectories:
                 pts = list(self._traj_buffers[tid])
-                color = CLASS_COLORS.get(cls_name, (200, 200, 200))
                 for k in range(1, len(pts)):
                     alpha = k / len(pts)  # fade older points
                     faded = tuple(int(c * alpha) for c in color)
                     cv2.line(annotated, pts[k - 1], pts[k], faded, 1, cv2.LINE_AA)
 
             # ---- draw bounding box and label --------------------------------
+            label_text = f"ID:{tid} {cls_name}"
+            if cls_name == "motorcycle":
+                label_text += f" ({status.upper()})"
+                
             draw_box_label(
                 annotated,
                 bbox      = [int(x1), int(y1), int(x2), int(y2)],
-                label     = f"ID:{tid} {cls_name}",
-                color     = CLASS_COLORS.get(cls_name, (200, 200, 200)),
+                label     = label_text,
+                color     = color,
             )
+
+            # ---- Render Motorcycle Debugging Overlays -----------------------
+            if cls_name == "motorcycle":
+                # Draw small status panel below the box
+                overlay_y = int(y2) + 12
+                conf_list_str = "[" + ",".join([f"{c:.2f}" for c in self._conf_histories[tid]]) + "]"
+                debug_info = f"Age:{track_age} | ConfHistory:{conf_list_str}"
+                
+                cv2.putText(
+                    annotated,
+                    debug_info,
+                    (int(x1), overlay_y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.4,
+                    color,
+                    1,
+                    cv2.LINE_AA
+                )
+                
+                # Flashing text warning for recent re-connections
+                if status == "recovered" and (frame_idx % 6 < 3):
+                    cv2.putText(
+                        annotated,
+                        "** RECONNECTED ID **",
+                        (int(x1), int(y1) - 25),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.45,
+                        (0, 0, 255),
+                        1,
+                        cv2.LINE_AA
+                    )
+
+        # ---- Detect Sudden Motorcycle Loss (Unsupervised Failure) -----------
+        for tid, age in self._active_motorcycle_tracks.items():
+            if tid not in current_motorcycle_ids:
+                # Active motorcycle was lost/disappeared. If it had short duration (fragmentation risk)
+                if age < 25:
+                    self._trigger_failure_clip(frame_idx, tid, f"track_loss_age_{age}")
+                    
+        self._active_motorcycle_tracks = current_motorcycle_ids
+
+        # ---- Write Active Failure Video Clips -------------------------------
+        self._write_failure_clips(frame_idx, frame)
 
         # Write annotated frame to video
         if self._video_writer is not None:
             self._video_writer.write(annotated)
 
         return annotated
+
+    # ---- Failure Clip Recorders ---------------------------------------------
+
+    def _trigger_failure_clip(self, frame_idx: int, track_id: int, event_type: str) -> None:
+        """
+        Trigger a separate failure recording spanning [frame_idx-30, frame_idx+60] frames.
+        """
+        output_dir = Path("outputs/debug/motorcycle_failures")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        clip_filename = f"failure_track_{track_id}_frame_{frame_idx}_{event_type}.mp4"
+        clip_path = output_dir / clip_filename
+        
+        # Don't duplicate running clips for same track ID in close temporal vicinity
+        for active in self._failure_writers:
+            if active["track_id"] == track_id and (frame_idx - active["trigger_frame"]) < 45:
+                return
+                
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(
+            str(clip_path),
+            fourcc,
+            self.fps,
+            self.frame_size
+        )
+        
+        # Write frames currently stored in the ring buffer
+        start_frame = max(0, frame_idx - 30)
+        frames_written = 0
+        for f_idx, f_data in self._frame_ring:
+            if f_idx >= start_frame:
+                writer.write(f_data)
+                frames_written += 1
+                
+        self._failure_writers.append({
+            "writer": writer,
+            "path": str(clip_path),
+            "trigger_frame": frame_idx,
+            "end_frame": frame_idx + 60,
+            "track_id": track_id,
+        })
+        logger.info(
+            "Triggered failure debug clip for motorcycle track %d on frame %d (pre-cached: %d frames).",
+            track_id, frame_idx, frames_written
+        )
+
+    def _write_failure_clips(self, frame_idx: int, frame: np.ndarray) -> None:
+        """Append the current frame to all active failure video writers."""
+        active_writers = []
+        for item in self._failure_writers:
+            item["writer"].write(frame)
+            if frame_idx >= item["end_frame"]:
+                item["writer"].release()
+                logger.info("Released finished failure debug clip: %s", item["path"])
+            else:
+                active_writers.append(item)
+        self._failure_writers = active_writers
 
     # ---- cleanup ------------------------------------------------------------
 
@@ -210,6 +353,12 @@ class Exporter:
         if self._video_writer is not None:
             self._video_writer.release()
             logger.info("Video writer released.")
+            
+        # Clean up any remaining failure writers
+        for item in self._failure_writers:
+            item["writer"].release()
+            logger.info("Closed incomplete failure debug clip: %s", item["path"])
+        self._failure_writers.clear()
 
     def __enter__(self) -> "Exporter":
         return self

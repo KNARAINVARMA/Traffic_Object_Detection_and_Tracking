@@ -1,0 +1,39 @@
+{
+    "total_detections": 8168,
+    "detections_per_class": {
+        "car": 5140,
+        "person": 2297,
+        "motorcycle": 532,
+        "bus": 149,
+        "truck": 50
+    },
+    "unique_tracks_per_class": {
+        "bus": 4,
+        "car": 67,
+        "motorcycle": 9,
+        "person": 44,
+        "truck": 1
+    },
+    "total_unique_tracks": 125,
+    "avg_track_duration_frames": {
+        "bus": 37.25,
+        "car": 78.1,
+        "motorcycle": 59.22,
+        "person": 53.8,
+        "truck": 56.0
+    },
+    "overall_avg_track_duration_frames": 66.7,
+    "track_fragmentation": {
+        "overall_fragmentation_gaps_count": 28,
+        "motorcycle_fragmentation_gaps_count": 1
+    },
+    "supervised_evaluation": {
+        "total_ground_truth_frames": 10,
+        "motorcycle_recall": 0.0,
+        "motorcycle_precision": 0.0,
+        "car_recall": 0.0,
+        "person_recall": 0.0,
+        "overall_recall": 0.0,
+        "overall_precision": 0.0
+    }
+}

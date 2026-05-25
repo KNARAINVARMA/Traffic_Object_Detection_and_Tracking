@@ -113,13 +113,13 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Fractional overlap between adjacent tiles (0.0–0.4) for YOLOv8.")
     det.add_argument("--tta", action="store_true",
                      help="Enable test-time augmentation for YOLOv8 (slower, more accurate).")
-    det.add_argument("--slice-height", type=int, default=640,
+    det.add_argument("--slice-height", type=int, default=512,
                      help="SAHI slice height.")
-    det.add_argument("--slice-width", type=int, default=640,
+    det.add_argument("--slice-width", type=int, default=512,
                      help="SAHI slice width.")
-    det.add_argument("--overlap-height-ratio", type=float, default=0.20,
+    det.add_argument("--overlap-height-ratio", type=float, default=0.30,
                      help="SAHI slice overlap height ratio.")
-    det.add_argument("--overlap-width-ratio", type=float, default=0.20,
+    det.add_argument("--overlap-width-ratio", type=float, default=0.30,
                      help="SAHI slice overlap width ratio.")
     det.add_argument("--device", default=None,
                      help="Inference device: 'cuda', 'cpu', 'mps', or '0' for GPU index.")
@@ -138,6 +138,10 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Confidence threshold for bus detections.")
     vpost.add_argument("--car-conf-thresh", type=float, default=0.25,
                        help="Confidence threshold for car/relabel detections.")
+    vpost.add_argument("--person-conf-thresh", type=float, default=0.25,
+                       help="Confidence threshold for person detections.")
+    vpost.add_argument("--motorcycle-conf-thresh", type=float, default=0.15,
+                       help="Confidence threshold for motorcycle detections.")
     vpost.add_argument("--debug-trucks", action="store_true",
                        help="Enable saving cropped truck detections for manual debugging.")
 
@@ -152,6 +156,10 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Max IoU-distance to accept a Stage-1 match (0.8 → IoU ≥ 0.2).")
     trk.add_argument("--track-buffer", type=int,   default=30,
                      help="Frames a Lost track is kept before deletion (30 @ 25 fps = 1.2 s).")
+    trk.add_argument("--motorcycle-track-buffer", type=int, default=60,
+                     help="Frames a Lost motorcycle track is kept before deletion.")
+    trk.add_argument("--motorcycle-match-thresh", type=float, default=0.70,
+                     help="Max distance threshold to accept a Stage-1 motorcycle match.")
     trk.add_argument("--min-hits",     type=int,   default=3,
                      help="Consecutive frames before a new track appears in output.")
 
@@ -290,6 +298,9 @@ def run(args: argparse.Namespace) -> dict:
         match_thresh = args.match_thresh,
         track_buffer = args.track_buffer,
         min_hits     = args.min_hits,
+        motorcycle_track_buffer = args.motorcycle_track_buffer,
+        motorcycle_match_thresh = args.motorcycle_match_thresh,
+        device       = args.device,
     )
 
     smoother = MovingAverageSmoother(window=args.smooth_window)
@@ -359,6 +370,8 @@ def run(args: argparse.Namespace) -> dict:
                     truck_min_height     = args.truck_min_height,
                     bus_conf_thresh      = args.bus_conf_thresh,
                     car_conf_thresh      = args.car_conf_thresh,
+                    person_conf_thresh   = args.person_conf_thresh,
+                    motorcycle_conf_thresh = args.motorcycle_conf_thresh,
                     debug_trucks         = args.debug_trucks,
                     stats                = postprocess_stats,
                 )
@@ -366,7 +379,7 @@ def run(args: argparse.Namespace) -> dict:
                 total_detections += len(detections)
 
                 # 2. Track
-                tracks = tracker.update(detections)
+                tracks = tracker.update(detections, frame)
 
                 # 3. Smooth + map coordinates
                 enriched = []
@@ -403,6 +416,18 @@ def run(args: argparse.Namespace) -> dict:
     cap.release()
 
     elapsed = time.perf_counter() - t_start
+
+    # Run post-tracking diagnostics automatically
+    try:
+        from diagnostics import run_diagnostics
+        logger.info("Running post-tracking diagnostics...")
+        run_diagnostics(
+            csv_path=Path(output_csv),
+            annotations_dir=Path("../data/annotations"),
+            output_metrics_dir=Path("../outputs/metrics")
+        )
+    except Exception as e:
+        logger.warning("Could not complete diagnostics run (%s)", e)
 
     raw_trucks = postprocess_stats.get("raw_truck_predictions", 0)
     trucks_filtered_out = postprocess_stats.get("truck_filtered_out", 0)
