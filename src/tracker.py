@@ -63,6 +63,8 @@ import cv2
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
+from reid import ReIDExtractor, compute_appearance_distance
+
 logger = logging.getLogger(__name__)
 
 
@@ -118,17 +120,17 @@ def hungarian_match(
     tracks: List["STrack"],
     distance_threshold: float,
     class_aware: bool = True,
+    motorcycle_match_thresh: float = 0.70,
 ) -> Tuple[List[Tuple[int, int]], List[int], List[int]]:
     """
     Solve the assignment problem and return valid matches.
 
     Args:
-        detections:          List of detection dicts with 'bbox' and 'class_id'.
+        detections:          List of detection dicts with 'bbox', 'class_id', and optional 'emb'.
         tracks:              List of STrack objects.
-        distance_threshold:  Maximum *IoU-distance* (= 1 − IoU) to accept a match.
-                             0.8 → accepts if IoU ≥ 0.2 (permissive, handles occlusion).
-                             0.5 → accepts if IoU ≥ 0.5 (strict, used for Stage 2).
+        distance_threshold:  Maximum *IoU-distance* (= 1 − IoU) to accept a match for other classes.
         class_aware:         If True, cross-class pairs are never matched.
+        motorcycle_match_thresh: Maximum distance threshold to accept a motorcycle match.
 
     Returns:
         (matches, unmatched_det_indices, unmatched_trk_indices)
@@ -147,7 +149,55 @@ def hungarian_match(
         cross_class = det_cls[:, np.newaxis] != trk_cls[np.newaxis, :]
         iou_mat[cross_class] = 0.0
 
+    # Build the distance/cost matrix
     cost = 1.0 - iou_mat
+
+    # Apply Motion Gating and Appearance Fusion
+    for r in range(len(detections)):
+        det = detections[r]
+        det_bbox = det["bbox"]
+        det_cx = (det_bbox[0] + det_bbox[2]) / 2.0
+        det_cy = (det_bbox[1] + det_bbox[3]) / 2.0
+        det_cls_id = det["class_id"]
+
+        for c in range(len(tracks)):
+            trk = tracks[c]
+            if class_aware and det_cls_id != trk.class_id:
+                cost[r, c] = 1.0
+                continue
+
+            # Kalman predicted center and track bounding box size
+            trk_cx, trk_cy = trk.center
+            trk_bbox = trk.bbox_xyxy
+            trk_w = trk_bbox[2] - trk_bbox[0]
+            trk_h = trk_bbox[3] - trk_bbox[1]
+            sz = max(trk_w, trk_h)
+
+            d_center = np.hypot(det_cx - trk_cx, det_cy - trk_cy)
+
+            # Class-aware motion gating limit G
+            if det_cls_id == 3:  # motorcycle
+                G = 4.5 * sz
+            else:
+                G = 2.5 * sz
+
+            if d_center > G:
+                # Gate match out
+                cost[r, c] = 1.0
+            else:
+                if det_cls_id == 3:  # motorcycle appearance fusion
+                    # Motion consistency cost component
+                    cost_motion = d_center / G
+                    
+                    # Appearance cost component (deep + color hist)
+                    if "emb" in det and trk.curr_emb is not None:
+                        d_app = compute_appearance_distance(det["emb"], trk.curr_emb)
+                    else:
+                        d_app = 0.5  # Neutral default
+
+                    # Fused cost formula: 40% IoU distance, 20% Motion penalty, 40% Appearance distance
+                    cost[r, c] = 0.4 * (1.0 - iou_mat[r, c]) + 0.2 * cost_motion + 0.4 * d_app
+
     row_ind, col_ind = linear_sum_assignment(cost)
 
     matches:      List[Tuple[int, int]] = []
@@ -155,7 +205,9 @@ def hungarian_match(
     matched_trk:  set = set()
 
     for r, c in zip(row_ind, col_ind):
-        if cost[r, c] <= distance_threshold:
+        det_cls_id = detections[r]["class_id"]
+        thresh = motorcycle_match_thresh if det_cls_id == 3 else distance_threshold
+        if cost[r, c] <= thresh:
             matches.append((r, c))
             matched_det.add(r)
             matched_trk.add(c)
@@ -203,6 +255,9 @@ class STrack:
         self.frame_id       = 0
         self.start_frame    = 0
 
+        self.curr_emb: Optional[Dict[str, np.ndarray]] = None
+        self.last_reactivated_frame: int = -1
+
         self._init_kalman(bbox_xyxy)
 
     @classmethod
@@ -242,15 +297,22 @@ class STrack:
             [0, 0, 0, 0, 0, 0, 0, 1],
         ], dtype=np.float32)
 
-        # Q: process noise (position more uncertain than velocity)
-        self.kf.processNoiseCov = np.diag(
-            [1.0, 1.0, 1.0, 1.0, 0.01, 0.01, 1e-4, 1e-4]
-        ).astype(np.float32)
-
-        # R: measurement noise
-        self.kf.measurementNoiseCov = np.diag(
-            [5.0, 5.0, 5.0, 5.0]
-        ).astype(np.float32)
+        # Q: process noise, R: measurement noise (Class-aware parameters)
+        if self.class_id == 3:  # motorcycle
+            # Responsive parameters for rapid acceleration and sudden direction changes
+            self.kf.processNoiseCov = np.diag(
+                [2.0, 2.0, 2.0, 2.0, 0.2, 0.2, 0.01, 0.01]
+            ).astype(np.float32)
+            self.kf.measurementNoiseCov = np.diag(
+                [2.0, 2.0, 2.0, 2.0]
+            ).astype(np.float32)
+        else:
+            self.kf.processNoiseCov = np.diag(
+                [1.0, 1.0, 1.0, 1.0, 0.01, 0.01, 1e-4, 1e-4]
+            ).astype(np.float32)
+            self.kf.measurementNoiseCov = np.diag(
+                [5.0, 5.0, 5.0, 5.0]
+            ).astype(np.float32)
 
         init = np.array(
             [cx, cy, w, h, 0.0, 0.0, 0.0, 0.0], dtype=np.float32
@@ -260,6 +322,28 @@ class STrack:
         # High initial uncertainty
         self.kf.errorCovPre  = np.eye(8, dtype=np.float32) * 100.0
         self.kf.errorCovPost = np.eye(8, dtype=np.float32) * 100.0
+
+    # ---- appearance update helper --------------------------------------------
+
+    def update_appearance(self, emb: Optional[Dict[str, np.ndarray]], alpha: float = 0.85) -> None:
+        """
+        Update the appearance embedding via Exponential Moving Average (EMA).
+        """
+        if emb is None:
+            return
+        if self.curr_emb is None:
+            self.curr_emb = {
+                "cnn": emb["cnn"].copy(),
+                "color": emb["color"].copy(),
+            }
+        else:
+            # Deep features update
+            self.curr_emb["cnn"] = alpha * self.curr_emb["cnn"] + (1.0 - alpha) * emb["cnn"]
+            self.curr_emb["cnn"] /= np.linalg.norm(self.curr_emb["cnn"]) + 1e-7
+            
+            # Color histogram update
+            self.curr_emb["color"] = alpha * self.curr_emb["color"] + (1.0 - alpha) * emb["color"]
+            self.curr_emb["color"] /= np.linalg.norm(self.curr_emb["color"]) + 1e-7
 
     # ---- state transitions ---------------------------------------------------
 
@@ -284,6 +368,7 @@ class STrack:
         class_id:   int,
         class_name: str,
         frame_id:   int,
+        emb:        Optional[Dict[str, np.ndarray]] = None,
     ) -> None:
         """Recover a previously Lost track."""
         self._kalman_correct(bbox_xyxy)
@@ -294,6 +379,9 @@ class STrack:
         self.lost_frames = 0
         self.frame_id   = frame_id
         self.tracklet_len += 1
+        self.last_reactivated_frame = frame_id
+        if emb is not None:
+            self.update_appearance(emb)
 
     def update(
         self,
@@ -302,6 +390,7 @@ class STrack:
         class_id:   int,
         class_name: str,
         frame_id:   int,
+        emb:        Optional[Dict[str, np.ndarray]] = None,
     ) -> None:
         """Update an active track with a new matched detection."""
         self._kalman_correct(bbox_xyxy)
@@ -312,6 +401,8 @@ class STrack:
         self.lost_frames = 0
         self.frame_id   = frame_id
         self.tracklet_len += 1
+        if emb is not None:
+            self.update_appearance(emb)
 
     def mark_lost(self) -> None:
         """Mark this track as lost (not matched this frame)."""
@@ -379,6 +470,9 @@ class BYTETracker:
         track_buffer: int   = 30,
         min_hits:     int   = 3,
         class_aware:  bool  = True,
+        motorcycle_track_buffer: int = 60,
+        motorcycle_match_thresh: float = 0.70,
+        device: Optional[str] = None,
     ) -> None:
         self.high_thresh  = high_thresh
         self.low_thresh   = low_thresh
@@ -387,24 +481,32 @@ class BYTETracker:
         self.min_hits     = min_hits
         self.class_aware  = class_aware
 
+        self.motorcycle_track_buffer = motorcycle_track_buffer
+        self.motorcycle_match_thresh = motorcycle_match_thresh
+
         self.tracked_stracks: List[STrack] = []
         self.lost_stracks:    List[STrack] = []
         self.frame_id = 0
 
+        # Initialize appearance feature extractor
+        self.reid_extractor = ReIDExtractor(device=device)
+
         logger.info(
             "BYTETracker — high_thresh=%.2f  low_thresh=%.2f  match_thresh=%.2f  "
-            "track_buffer=%d  min_hits=%d  class_aware=%s",
+            "track_buffer=%d  min_hits=%d  class_aware=%s  motorcycle_buffer=%d  motorcycle_thresh=%.2f",
             high_thresh, low_thresh, match_thresh, track_buffer, min_hits, class_aware,
+            motorcycle_track_buffer, motorcycle_match_thresh,
         )
 
     # ---- public update -------------------------------------------------------
 
-    def update(self, detections: List[Dict]) -> List[Dict]:
+    def update(self, detections: List[Dict], frame: Optional[np.ndarray] = None) -> List[Dict]:
         """
         Process one frame of detections and return active tracks.
 
         Args:
             detections: Output of Detector.detect() for the current frame.
+            frame: Raw BGR frame image (needed for appearance embeddings).
 
         Returns:
             List of active track dicts::
@@ -419,6 +521,26 @@ class BYTETracker:
                 }
         """
         self.frame_id += 1
+
+        # ---- Extract appearance embeddings for motorcycles ------------------
+        motorcycle_dets = [d for d in detections if d["class_id"] == 3]
+        if motorcycle_dets and frame is not None:
+            crops = []
+            H_f, W_f = frame.shape[:2]
+            for d in motorcycle_dets:
+                x1, y1, x2, y2 = d["bbox"]
+                rx1 = max(0, int(round(x1)))
+                ry1 = max(0, int(round(y1)))
+                rx2 = min(W_f, int(round(x2)))
+                ry2 = min(H_f, int(round(y2)))
+                if rx2 > rx1 and ry2 > ry1:
+                    crops.append(frame[ry1:ry2, rx1:rx2].copy())
+                else:
+                    crops.append(np.zeros((10, 10, 3), dtype=np.uint8))
+            
+            embs = self.reid_extractor.extract_combined(crops)
+            for d, emb in zip(motorcycle_dets, embs):
+                d["emb"] = emb
 
         # ---- split detections by confidence ---------------------------------
         dets_high = [d for d in detections if d["confidence"] >= self.high_thresh]
@@ -436,6 +558,7 @@ class BYTETracker:
             dets_high, all_known,
             distance_threshold=self.match_thresh,
             class_aware=self.class_aware,
+            motorcycle_match_thresh=self.motorcycle_match_thresh,
         )
 
         activated_ids: set = set()
@@ -445,10 +568,10 @@ class BYTETracker:
             det = dets_high[d_idx]
             if t.state == TrackState.Lost:
                 t.re_activate(det["bbox"], det["confidence"],
-                               det["class_id"], det["class_name"], self.frame_id)
+                               det["class_id"], det["class_name"], self.frame_id, det.get("emb"))
             else:
                 t.update(det["bbox"], det["confidence"],
-                          det["class_id"], det["class_name"], self.frame_id)
+                          det["class_id"], det["class_name"], self.frame_id, det.get("emb"))
             activated_ids.add(t.track_id)
 
         # ---- Stage 2: low-conf dets ↔ unmatched *Tracked* tracks ----------
@@ -463,13 +586,14 @@ class BYTETracker:
             dets_low, remaining_tracked,
             distance_threshold=0.50,   # stricter for low-conf associations
             class_aware=self.class_aware,
+            motorcycle_match_thresh=self.motorcycle_match_thresh,
         )
 
         for d_idx, t_idx in matched2:
             t   = remaining_tracked[t_idx]
             det = dets_low[d_idx]
             t.update(det["bbox"], det["confidence"],
-                      det["class_id"], det["class_name"], self.frame_id)
+                      det["class_id"], det["class_name"], self.frame_id, det.get("emb"))
             activated_ids.add(t.track_id)
 
         # ---- Mark unmatched Tracked tracks as Lost --------------------------
@@ -481,6 +605,82 @@ class BYTETracker:
             if t.track_id not in activated_ids and t.state == TrackState.Tracked:
                 t.mark_lost()
 
+        # ---- Secondary Reconnection Heuristic for Motorcycles ----------------
+        reconnected_det_indices = []
+        for d_idx in unmatched_high:
+            det = dets_high[d_idx]
+            if det["class_id"] != 3:
+                continue
+
+            det_bbox = det["bbox"]
+            det_w = det_bbox[2] - det_bbox[0]
+            det_h = det_bbox[3] - det_bbox[1]
+            det_cx = (det_bbox[0] + det_bbox[2]) / 2.0
+            det_cy = (det_bbox[1] + det_bbox[3]) / 2.0
+            sz = max(det_w, det_h)
+
+            best_lost_track = None
+            best_recon_score = -1.0
+            gap = 0
+
+            for t in self.lost_stracks:
+                if t.class_id != 3:
+                    continue
+
+                curr_gap = self.frame_id - t.frame_id
+                if not (2 <= curr_gap <= 30):
+                    continue
+
+                # Size ratio check
+                t_bbox = t.bbox_xyxy
+                t_w = t_bbox[2] - t_bbox[0]
+                t_h = t_bbox[3] - t_bbox[1]
+                if not (0.6 <= det_w / t_w <= 1.6) or not (0.6 <= det_h / t_h <= 1.6):
+                    continue
+
+                # Extrapolate position using velocity from statePost
+                cx_last = float(t.kf.statePost[0, 0])
+                cy_last = float(t.kf.statePost[1, 0])
+                vcx = float(t.kf.statePost[4, 0])
+                vcy = float(t.kf.statePost[5, 0])
+                cx_extrap = cx_last + vcx * curr_gap
+                cy_extrap = cy_last + vcy * curr_gap
+
+                d_extrap = np.hypot(det_cx - cx_extrap, det_cy - cy_extrap)
+                if d_extrap > 3.0 * sz:
+                    continue
+
+                # Appearance similarity check
+                if "emb" in det and t.curr_emb is not None:
+                    d_app = compute_appearance_distance(det["emb"], t.curr_emb)
+                else:
+                    d_app = 0.5  # Neutral default
+
+                if d_app >= 0.25:
+                    continue
+
+                recon_score = (1.0 - d_app) * (1.0 - d_extrap / (3.0 * sz))
+                if recon_score > best_recon_score:
+                    best_recon_score = recon_score
+                    best_lost_track = t
+                    gap = curr_gap
+
+            if best_lost_track is not None:
+                # Reconnect original ID!
+                t = best_lost_track
+                t.re_activate(det["bbox"], det["confidence"],
+                               det["class_id"], det["class_name"], self.frame_id, det.get("emb"))
+                self.tracked_stracks.append(t)
+                if t in self.lost_stracks:
+                    self.lost_stracks.remove(t)
+                reconnected_det_indices.append(d_idx)
+                logger.info(
+                    "Reconnected fragmented track ID %d for motorcycle after gap of %d frames.",
+                    t.track_id, gap
+                )
+
+        unmatched_high = [i for i in unmatched_high if i not in reconnected_det_indices]
+
         # ---- Initialise new tracks from unmatched high-conf dets -----------
         new_stracks: List[STrack] = []
         for d_idx in unmatched_high:
@@ -488,6 +688,8 @@ class BYTETracker:
             nt  = STrack(det["bbox"], det["confidence"],
                          det["class_id"], det["class_name"])
             nt.activate(self.frame_id)
+            if "emb" in det:
+                nt.update_appearance(det["emb"])
             new_stracks.append(nt)
 
         # ---- Rebuild state lists --------------------------------------------
@@ -504,10 +706,11 @@ class BYTETracker:
                 seen.add(t.track_id)
         self.tracked_stracks = deduped
 
-        # Keep only non-expired Lost tracks
+        # Keep only non-expired Lost tracks (Class-aware buffer check)
         self.lost_stracks = [
             t for t in all_known
-            if t.state == TrackState.Lost and t.lost_frames < self.track_buffer
+            if t.state == TrackState.Lost and
+               t.lost_frames < (self.motorcycle_track_buffer if t.class_id == 3 else self.track_buffer)
         ]
         # Deduplicate lost
         seen = set()
@@ -533,6 +736,7 @@ class BYTETracker:
                     "class_name":  t.class_name,
                     "confidence":  t.score,
                     "tracklet_len": t.tracklet_len,
+                    "last_reactivated_frame": t.last_reactivated_frame,
                 })
 
         logger.debug(

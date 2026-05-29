@@ -113,16 +113,37 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Fractional overlap between adjacent tiles (0.0–0.4) for YOLOv8.")
     det.add_argument("--tta", action="store_true",
                      help="Enable test-time augmentation for YOLOv8 (slower, more accurate).")
-    det.add_argument("--slice-height", type=int, default=640,
+    det.add_argument("--slice-height", type=int, default=512,
                      help="SAHI slice height.")
-    det.add_argument("--slice-width", type=int, default=640,
+    det.add_argument("--slice-width", type=int, default=512,
                      help="SAHI slice width.")
-    det.add_argument("--overlap-height-ratio", type=float, default=0.20,
+    det.add_argument("--overlap-height-ratio", type=float, default=0.30,
                      help="SAHI slice overlap height ratio.")
-    det.add_argument("--overlap-width-ratio", type=float, default=0.20,
+    det.add_argument("--overlap-width-ratio", type=float, default=0.30,
                      help="SAHI slice overlap width ratio.")
     det.add_argument("--device", default=None,
                      help="Inference device: 'cuda', 'cpu', 'mps', or '0' for GPU index.")
+
+    # ---- Vehicle Class Postprocessing --------------------------------------
+    vpost = p.add_argument_group("Vehicle Class Postprocessing")
+    vpost.add_argument("--truck-conf-thresh", type=float, default=0.55,
+                       help="Confidence threshold for truck detections.")
+    vpost.add_argument("--truck-min-area", type=float, default=8000.0,
+                       help="Minimum bounding box area (in pixels) for trucks.")
+    vpost.add_argument("--truck-min-width", type=float, default=120.0,
+                       help="Minimum bounding box width (in pixels) for trucks.")
+    vpost.add_argument("--truck-min-height", type=float, default=50.0,
+                       help="Minimum bounding box height (in pixels) for trucks.")
+    vpost.add_argument("--bus-conf-thresh", type=float, default=0.30,
+                       help="Confidence threshold for bus detections.")
+    vpost.add_argument("--car-conf-thresh", type=float, default=0.25,
+                       help="Confidence threshold for car/relabel detections.")
+    vpost.add_argument("--person-conf-thresh", type=float, default=0.25,
+                       help="Confidence threshold for person detections.")
+    vpost.add_argument("--motorcycle-conf-thresh", type=float, default=0.15,
+                       help="Confidence threshold for motorcycle detections.")
+    vpost.add_argument("--debug-trucks", action="store_true",
+                       help="Enable saving cropped truck detections for manual debugging.")
 
     # ---- Tracking -----------------------------------------------------------
     trk = p.add_argument_group("Tracking (ByteTrack)")
@@ -135,6 +156,10 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Max IoU-distance to accept a Stage-1 match (0.8 → IoU ≥ 0.2).")
     trk.add_argument("--track-buffer", type=int,   default=30,
                      help="Frames a Lost track is kept before deletion (30 @ 25 fps = 1.2 s).")
+    trk.add_argument("--motorcycle-track-buffer", type=int, default=60,
+                     help="Frames a Lost motorcycle track is kept before deletion.")
+    trk.add_argument("--motorcycle-match-thresh", type=float, default=0.70,
+                     help="Max distance threshold to accept a Stage-1 motorcycle match.")
     trk.add_argument("--min-hits",     type=int,   default=3,
                      help="Consecutive frames before a new track appears in output.")
 
@@ -273,6 +298,9 @@ def run(args: argparse.Namespace) -> dict:
         match_thresh = args.match_thresh,
         track_buffer = args.track_buffer,
         min_hits     = args.min_hits,
+        motorcycle_track_buffer = args.motorcycle_track_buffer,
+        motorcycle_match_thresh = args.motorcycle_match_thresh,
+        device       = args.device,
     )
 
     smoother = MovingAverageSmoother(window=args.smooth_window)
@@ -298,6 +326,18 @@ def run(args: argparse.Namespace) -> dict:
     class_counts: dict = {}
     t_start = time.perf_counter()
 
+    postprocess_stats = {
+        "car_detections": 0,
+        "truck_detections": 0,
+        "truck_to_car_relabels": 0,
+        "truck_filtered_out": 0,
+        "raw_truck_predictions": 0,
+        "bus_detections": 0,
+        "bus_filtered_out": 0,
+        "person_detections": 0,
+        "motorcycle_detections": 0,
+    }
+
     # ---- Main loop ----------------------------------------------------------
     with Exporter(
         fps               = fps,
@@ -317,10 +357,29 @@ def run(args: argparse.Namespace) -> dict:
 
                 # 1. Detect
                 detections = detector.detect(frame)
+
+                # Apply class-aware postprocessing
+                from postprocess_vehicle_classes import postprocess_vehicle_detections
+                detections = postprocess_vehicle_detections(
+                    detections           = detections,
+                    frame                = frame,
+                    frame_idx            = frame_idx,
+                    truck_conf_thresh    = args.truck_conf_thresh,
+                    truck_min_area       = args.truck_min_area,
+                    truck_min_width      = args.truck_min_width,
+                    truck_min_height     = args.truck_min_height,
+                    bus_conf_thresh      = args.bus_conf_thresh,
+                    car_conf_thresh      = args.car_conf_thresh,
+                    person_conf_thresh   = args.person_conf_thresh,
+                    motorcycle_conf_thresh = args.motorcycle_conf_thresh,
+                    debug_trucks         = args.debug_trucks,
+                    stats                = postprocess_stats,
+                )
+
                 total_detections += len(detections)
 
                 # 2. Track
-                tracks = tracker.update(detections)
+                tracks = tracker.update(detections, frame)
 
                 # 3. Smooth + map coordinates
                 enriched = []
@@ -358,6 +417,24 @@ def run(args: argparse.Namespace) -> dict:
 
     elapsed = time.perf_counter() - t_start
 
+    # Run post-tracking diagnostics automatically
+    try:
+        from diagnostics import run_diagnostics
+        logger.info("Running post-tracking diagnostics...")
+        run_diagnostics(
+            csv_path=Path(output_csv),
+            annotations_dir=Path("../data/annotations"),
+            output_metrics_dir=Path("../outputs/metrics")
+        )
+    except Exception as e:
+        logger.warning("Could not complete diagnostics run (%s)", e)
+
+    raw_trucks = postprocess_stats.get("raw_truck_predictions", 0)
+    trucks_filtered_out = postprocess_stats.get("truck_filtered_out", 0)
+    trucks_relabeled = postprocess_stats.get("truck_to_car_relabels", 0)
+    total_trucks_filtered = trucks_filtered_out + trucks_relabeled
+    filtered_pct = (total_trucks_filtered / raw_trucks * 100.0) if raw_trucks > 0 else 0.0
+
     stats = {
         "frames_processed":      frame_idx,
         "video_fps":             round(fps, 2),
@@ -366,6 +443,12 @@ def run(args: argparse.Namespace) -> dict:
         "avg_dets_per_frame":    round(total_detections / max(frame_idx, 1), 2),
         "unique_track_ids":      len(total_track_ids),
         "class_observation_counts": class_counts,
+        "postprocessing_statistics": {
+            "car_detections":        postprocess_stats.get("car_detections", 0),
+            "truck_detections":      postprocess_stats.get("truck_detections", 0),
+            "truck_to_car_relabels": postprocess_stats.get("truck_to_car_relabels", 0),
+            "truck_filtered_percentage": f"{filtered_pct:.2f}% (raw: {raw_trucks}, filtered: {trucks_filtered_out}, relabeled: {trucks_relabeled})",
+        },
         "processing_time_s":     round(elapsed, 2),
         "processing_fps":        round(frame_idx / max(elapsed, 1e-6), 2),
         "scale_factor_m_per_px": round(mapper.scale_factor, 6),
