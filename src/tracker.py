@@ -59,6 +59,7 @@ import enum
 import logging
 from typing import Dict, List, Optional, Tuple
 
+# pyrefly: ignore [missing-import]
 import cv2
 import numpy as np
 from scipy.optimize import linear_sum_assignment
