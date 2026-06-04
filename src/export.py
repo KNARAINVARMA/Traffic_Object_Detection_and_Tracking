@@ -80,11 +80,13 @@ class Exporter:
         frame_size:        Tuple[int, int],   # (width, height)
         draw_trajectories: bool  = True,
         trajectory_length: int   = 30,        # frames of history to display
+        clean_draw:        bool  = False,     # suppress verbose class labels
     ) -> None:
         self.fps               = fps
         self.draw_trajectories = draw_trajectories
         self.trajectory_length = trajectory_length
         self.frame_size        = frame_size
+        self.clean_draw        = clean_draw
 
         # ------- CSV writer --------------------------------------------------
         Path(output_csv_path).parent.mkdir(parents=True, exist_ok=True)
@@ -225,9 +227,12 @@ class Exporter:
                     cv2.line(annotated, pts[k - 1], pts[k], faded, 1, cv2.LINE_AA)
 
             # ---- draw bounding box and label --------------------------------
-            label_text = f"ID:{tid} {cls_name}"
-            if cls_name == "motorcycle":
-                label_text += f" ({status.upper()})"
+            if self.clean_draw:
+                label_text = f"ID:{tid}"
+            else:
+                label_text = f"ID:{tid} {cls_name}"
+                if cls_name == "motorcycle":
+                    label_text += f" ({status.upper()})"
                 
             draw_box_label(
                 annotated,
@@ -237,7 +242,7 @@ class Exporter:
             )
 
             # ---- Render Motorcycle Debugging Overlays -----------------------
-            if cls_name == "motorcycle":
+            if cls_name == "motorcycle" and not self.clean_draw:
                 # Draw small status panel below the box
                 overlay_y = int(y2) + 12
                 conf_list_str = "[" + ",".join([f"{c:.2f}" for c in self._conf_histories[tid]]) + "]"
@@ -248,10 +253,10 @@ class Exporter:
                     debug_info,
                     (int(x1), overlay_y),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    0.4,
-                    color,
+                    0.35,
+                    (255, 255, 255),
                     1,
-                    cv2.LINE_AA
+                    cv2.LINE_AA,
                 )
                 
                 # Flashing text warning for recent re-connections

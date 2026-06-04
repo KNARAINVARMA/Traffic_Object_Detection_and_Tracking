@@ -162,6 +162,14 @@ def postprocess_vehicle_detections(
         elif class_id == 3:  # motorcycle
             if confidence < motorcycle_conf_thresh:
                 continue
+            # DEBUG: surface tile-collision metadata from SahiDinoDetector (informational only)
+            if det.get("is_tile_collision", False):
+                logger.debug(
+                    "Frame %d: motorcycle tile collision (cluster_size=%d, conf=%.3f) — "
+                    "passed postprocessing threshold %.2f",
+                    frame_idx, det.get("tile_origin_count", 1), confidence,
+                    motorcycle_conf_thresh,
+                )
             postprocessed.append(det)
             if stats is not None:
                 stats["motorcycle_detections"] = stats.get("motorcycle_detections", 0) + 1
