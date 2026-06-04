@@ -148,6 +148,12 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Confidence threshold for bus detections.")
     vpost.add_argument("--car-conf-thresh", type=float, default=0.25,
                        help="Confidence threshold for car/relabel detections.")
+    vpost.add_argument("--car-max-motorcycle-area", type=float, default=1600.0,
+                       help="Max pixel area for a car before it gets relabeled as a motorcycle.")
+    vpost.add_argument("--car-max-motorcycle-width", type=float, default=40.0,
+                       help="Max pixel width for a car before it gets relabeled as a motorcycle.")
+    vpost.add_argument("--car-max-motorcycle-height", type=float, default=40.0,
+                       help="Max pixel height for a car before it gets relabeled as a motorcycle.")
     vpost.add_argument("--person-conf-thresh", type=float, default=0.25,
                        help="Confidence threshold for person detections.")
     vpost.add_argument("--motorcycle-conf-thresh", type=float, default=0.15,
@@ -395,6 +401,9 @@ def run(args: argparse.Namespace) -> dict:
                     truck_min_height     = args.truck_min_height,
                     bus_conf_thresh      = args.bus_conf_thresh,
                     car_conf_thresh      = args.car_conf_thresh,
+                    car_max_motorcycle_area = args.car_max_motorcycle_area,
+                    car_max_motorcycle_width = args.car_max_motorcycle_width,
+                    car_max_motorcycle_height = args.car_max_motorcycle_height,
                     person_conf_thresh   = args.person_conf_thresh,
                     motorcycle_conf_thresh = args.motorcycle_conf_thresh,
                     debug_trucks         = args.debug_trucks,

@@ -64,22 +64,22 @@ class ReIDExtractor:
         self.embedding_dim = embedding_dim
         self.model: nn.Module
         
-        # Attempt to load a pre-trained MobileNetV3 small model
+        # Attempt to load a pre-trained ResNet50 model (Layer 2)
         try:
-            logger.info("Attempting to load pre-trained MobileNetV3 for ReID...")
-            weights = models.MobileNet_V3_Small_Weights.DEFAULT
-            backbone = models.mobilenet_v3_small(weights=weights)
+            logger.info("Attempting to load pre-trained ResNet50 for ReID...")
+            weights = models.ResNet50_Weights.DEFAULT
+            backbone = models.resnet50(weights=weights)
             # Replace the classifier block with a projection layer to embedding_dim
-            in_features = backbone.classifier[0].in_features
-            backbone.classifier = nn.Sequential(
+            in_features = backbone.fc.in_features
+            backbone.fc = nn.Sequential(
                 nn.Linear(in_features, embedding_dim),
                 nn.BatchNorm1d(embedding_dim)
             )
             self.model = backbone
-            logger.info("Successfully loaded pre-trained MobileNetV3 for ReID.")
+            logger.info("Successfully loaded pre-trained ResNet50 for ReID.")
         except Exception as e:
             logger.warning(
-                "Could not load pre-trained MobileNetV3 weights (%s). "
+                "Could not load pre-trained ResNet50 weights (%s). "
                 "Falling back to custom lightweight CNN with random initialization.",
                 e
             )
