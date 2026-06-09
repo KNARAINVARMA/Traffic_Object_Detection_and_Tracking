@@ -1,5 +1,5 @@
 # Core ML / Vision
-ultralytics>=8.0.0          # YOLOv8 detection + built-in model weights
+ultralytics>=8.2.0          # RT-DETRv2-X (DINO-style decoder) + YOLOv8 detection
 torch>=2.0.0                # PyTorch deep learning framework
 torchvision>=0.15.0         # Torchvision utilities (used by ultralytics)
 
@@ -17,5 +17,8 @@ tqdm>=4.65.0                # Progress bar for frame-level loop
 pandas>=2.0.0               # Optional: post-processing / analysis of output CSV
 
 # SAHI & Supervision additions
-sahi>=0.11.14
+sahi>=0.14.0                # DINO/ultralytics adapter + improved tile fusion
 supervision>=0.20.0
+
+# ONNX (optional — for DINO model export/optimisation)
+onnx>=1.14.0                # ONNX graph optimisation for deployment

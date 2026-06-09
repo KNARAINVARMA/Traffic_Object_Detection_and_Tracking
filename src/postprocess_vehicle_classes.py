@@ -33,6 +33,9 @@ def postprocess_vehicle_detections(
     truck_min_height: float = 50.0,
     bus_conf_thresh: float = 0.30,
     car_conf_thresh: float = 0.25,
+    car_max_motorcycle_area: float = 1600.0,
+    car_max_motorcycle_width: float = 40.0,
+    car_max_motorcycle_height: float = 40.0,
     person_conf_thresh: float = 0.25,
     motorcycle_conf_thresh: float = 0.15,
     debug_trucks: bool = False,
@@ -162,14 +165,37 @@ def postprocess_vehicle_detections(
         elif class_id == 3:  # motorcycle
             if confidence < motorcycle_conf_thresh:
                 continue
+            # DEBUG: surface tile-collision metadata from SahiDinoDetector (informational only)
+            if det.get("is_tile_collision", False):
+                logger.debug(
+                    "Frame %d: motorcycle tile collision (cluster_size=%d, conf=%.3f) — "
+                    "passed postprocessing threshold %.2f",
+                    frame_idx, det.get("tile_origin_count", 1), confidence,
+                    motorcycle_conf_thresh,
+                )
             postprocessed.append(det)
             if stats is not None:
                 stats["motorcycle_detections"] = stats.get("motorcycle_detections", 0) + 1
         elif class_id == CAR_CLASS_ID:
             if confidence < car_conf_thresh:
                 continue
-            postprocessed.append(det)
-            if stats is not None:
-                stats["car_detections"] = stats.get("car_detections", 0) + 1
+                
+            # Check if this "car" is actually physically too small (likely a motorcycle false positive)
+            if area <= car_max_motorcycle_area and (w <= car_max_motorcycle_width or h <= car_max_motorcycle_height):
+                relabeled_det = {
+                    **det,
+                    "class_id": 3,
+                    "class_name": "motorcycle",
+                }
+                postprocessed.append(relabeled_det)
+                if stats is not None:
+                    stats["motorcycle_detections"] = stats.get("motorcycle_detections", 0) + 1
+                    stats["car_to_motorcycle_relabels"] = stats.get("car_to_motorcycle_relabels", 0) + 1
+                    stats["raw_car_predictions"] = stats.get("raw_car_predictions", 0) + 1
+            else:
+                postprocessed.append(det)
+                if stats is not None:
+                    stats["car_detections"] = stats.get("car_detections", 0) + 1
+                    stats["raw_car_predictions"] = stats.get("raw_car_predictions", 0) + 1
 
     return postprocessed

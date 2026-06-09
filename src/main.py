@@ -91,12 +91,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--log-file", default=None,
         help="Optional path to write log messages to a file.",
     )
+    io.add_argument(
+        "--clean-draw", action="store_true",
+        help="Use clean drawing mode (just ID and color) to reduce clutter in dense traffic.",
+    )
 
     # ---- Model / detection --------------------------------------------------
     det = p.add_argument_group("Detection")
     det.add_argument(
-        "--detector", choices=["yolov8", "sahi_rtdetr"], default="sahi_rtdetr",
-        help="Detector architecture to use.",
+        "--detector",
+        choices=["yolov8", "sahi_rtdetr", "sahi_dino"],
+        default="sahi_rtdetr",
+        help=(
+            "Detector architecture to use. "
+            "'sahi_dino' uses a DINO-style RT-DETRv2-X backend with "
+            "Weighted Box Fusion for improved tile-collision handling."
+        ),
     )
     det.add_argument(
         "--model", default=None,
@@ -138,6 +148,12 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Confidence threshold for bus detections.")
     vpost.add_argument("--car-conf-thresh", type=float, default=0.25,
                        help="Confidence threshold for car/relabel detections.")
+    vpost.add_argument("--car-max-motorcycle-area", type=float, default=1600.0,
+                       help="Max pixel area for a car before it gets relabeled as a motorcycle.")
+    vpost.add_argument("--car-max-motorcycle-width", type=float, default=40.0,
+                       help="Max pixel width for a car before it gets relabeled as a motorcycle.")
+    vpost.add_argument("--car-max-motorcycle-height", type=float, default=40.0,
+                       help="Max pixel height for a car before it gets relabeled as a motorcycle.")
     vpost.add_argument("--person-conf-thresh", type=float, default=0.25,
                        help="Confidence threshold for person detections.")
     vpost.add_argument("--motorcycle-conf-thresh", type=float, default=0.15,
@@ -258,13 +274,26 @@ def run(args: argparse.Namespace) -> dict:
     # ---- Resolve model path based on detector -------------------------------
     model_path = args.model
     if model_path is None:
-        if args.detector == "sahi_rtdetr":
+        if args.detector == "sahi_dino":
+            model_path = "rtdetr-x.pt"       # DINO-style Extra-Large
+        elif args.detector == "sahi_rtdetr":
             model_path = "rtdetr-l.pt"
         else:
             model_path = "yolov8m.pt"
 
     # ---- Build pipeline components ------------------------------------------
-    if args.detector == "sahi_rtdetr":
+    if args.detector == "sahi_dino":
+        from sahi_dino_detection import SahiDinoDetector
+        detector = SahiDinoDetector(
+            model_path           = model_path,
+            slice_height         = args.slice_height,
+            slice_width          = args.slice_width,
+            overlap_height_ratio = args.overlap_height_ratio,
+            overlap_width_ratio  = args.overlap_width_ratio,
+            conf                 = args.conf,
+            device               = args.device,
+        )
+    elif args.detector == "sahi_rtdetr":
         from sahi_rtdetr_detection import SahiRTDetrDetector
         detector = SahiRTDetrDetector(
             model_path           = model_path,
@@ -276,6 +305,7 @@ def run(args: argparse.Namespace) -> dict:
             device               = args.device,
         )
     else:
+        # YOLOv8 with optional tiling
         tile_grid = parse_tile_grid(args.tile_grid)
         use_tiling = tile_grid != (1, 1)
         detector = Detector(
@@ -346,6 +376,7 @@ def run(args: argparse.Namespace) -> dict:
         frame_size        = (width, height),
         draw_trajectories = not args.no_trajectories,
         trajectory_length = args.trajectory_length,
+        clean_draw        = args.clean_draw,
     ) as exporter:
 
         with tqdm(total=total_frames, unit="frame", desc="Tracking") as pbar:
@@ -370,6 +401,9 @@ def run(args: argparse.Namespace) -> dict:
                     truck_min_height     = args.truck_min_height,
                     bus_conf_thresh      = args.bus_conf_thresh,
                     car_conf_thresh      = args.car_conf_thresh,
+                    car_max_motorcycle_area = args.car_max_motorcycle_area,
+                    car_max_motorcycle_width = args.car_max_motorcycle_width,
+                    car_max_motorcycle_height = args.car_max_motorcycle_height,
                     person_conf_thresh   = args.person_conf_thresh,
                     motorcycle_conf_thresh = args.motorcycle_conf_thresh,
                     debug_trucks         = args.debug_trucks,

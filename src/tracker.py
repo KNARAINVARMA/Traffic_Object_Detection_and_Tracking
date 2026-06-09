@@ -59,6 +59,7 @@ import enum
 import logging
 from typing import Dict, List, Optional, Tuple
 
+# pyrefly: ignore [missing-import]
 import cv2
 import numpy as np
 from scipy.optimize import linear_sum_assignment
@@ -115,6 +116,54 @@ def iou_matrix(
     return inter_area / (union + 1e-7)
 
 
+def diou_matrix(
+    boxes_a: np.ndarray,
+    boxes_b: np.ndarray,
+) -> np.ndarray:
+    """
+    Vectorised DIoU (Distance IoU) between two sets of [x1, y1, x2, y2] boxes.
+    DIoU = IoU - (Distance_Between_Centers^2) / (Diagonal_Of_Enclosing_Box^2)
+    This solves bounding box collisions in dense crowds.
+    """
+    if len(boxes_a) == 0 or len(boxes_b) == 0:
+        return np.zeros((len(boxes_a), len(boxes_b)), dtype=np.float32)
+
+    a = boxes_a[:, np.newaxis, :]   # (N, 1, 4)
+    b = boxes_b[np.newaxis, :, :]   # (1, M, 4)
+
+    # IoU
+    inter_x1 = np.maximum(a[..., 0], b[..., 0])
+    inter_y1 = np.maximum(a[..., 1], b[..., 1])
+    inter_x2 = np.minimum(a[..., 2], b[..., 2])
+    inter_y2 = np.minimum(a[..., 3], b[..., 3])
+
+    inter_w   = np.maximum(0.0, inter_x2 - inter_x1)
+    inter_h   = np.maximum(0.0, inter_y2 - inter_y1)
+    inter_area = inter_w * inter_h
+
+    area_a = (a[..., 2] - a[..., 0]) * (a[..., 3] - a[..., 1])
+    area_b = (b[..., 2] - b[..., 0]) * (b[..., 3] - b[..., 1])
+    union  = area_a + area_b - inter_area
+    iou = inter_area / (union + 1e-7)
+
+    # Center distances (rho^2)
+    cx_a = (a[..., 0] + a[..., 2]) / 2.0
+    cy_a = (a[..., 1] + a[..., 3]) / 2.0
+    cx_b = (b[..., 0] + b[..., 2]) / 2.0
+    cy_b = (b[..., 1] + b[..., 3]) / 2.0
+    rho2 = (cx_a - cx_b) ** 2 + (cy_a - cy_b) ** 2
+
+    # Smallest enclosing box diagonal (c^2)
+    enc_x1 = np.minimum(a[..., 0], b[..., 0])
+    enc_y1 = np.minimum(a[..., 1], b[..., 1])
+    enc_x2 = np.maximum(a[..., 2], b[..., 2])
+    enc_y2 = np.maximum(a[..., 3], b[..., 3])
+    c2 = (enc_x2 - enc_x1) ** 2 + (enc_y2 - enc_y1) ** 2 + 1e-7
+
+    diou = iou - (rho2 / c2)
+    return diou
+
+
 def hungarian_match(
     detections: List[Dict],
     tracks: List["STrack"],
@@ -141,16 +190,20 @@ def hungarian_match(
     det_boxes = np.array([d["bbox"] for d in detections], dtype=np.float32)
     trk_boxes = np.array([t.bbox_xyxy for t in tracks],   dtype=np.float32)
 
-    iou_mat = iou_matrix(det_boxes, trk_boxes)
+    diou_mat = diou_matrix(det_boxes, trk_boxes)
+
+    det_cls = np.array([d["class_id"] for d in detections])
+    trk_cls = np.array([t.class_id   for t in tracks])
+    cross_class = det_cls[:, np.newaxis] != trk_cls[np.newaxis, :]
 
     if class_aware:
-        det_cls = np.array([d["class_id"] for d in detections])
-        trk_cls = np.array([t.class_id   for t in tracks])
-        cross_class = det_cls[:, np.newaxis] != trk_cls[np.newaxis, :]
-        iou_mat[cross_class] = 0.0
+        diou_mat[cross_class] = -1.0 # Max distance for cross-class
+    else:
+        # Soft penalty: reduces effective DIoU by 0.2 for cross-class matches
+        diou_mat[cross_class] = np.maximum(-1.0, diou_mat[cross_class] - 0.2)
 
-    # Build the distance/cost matrix
-    cost = 1.0 - iou_mat
+    # Build the distance/cost matrix. Since DIoU ranges [-1, 1], cost ranges [0, 2].
+    cost = 1.0 - diou_mat
 
     # Apply Motion Gating and Appearance Fusion
     for r in range(len(detections)):
@@ -185,18 +238,18 @@ def hungarian_match(
                 # Gate match out
                 cost[r, c] = 1.0
             else:
-                if det_cls_id == 3:  # motorcycle appearance fusion
-                    # Motion consistency cost component
-                    cost_motion = d_center / G
-                    
-                    # Appearance cost component (deep + color hist)
-                    if "emb" in det and trk.curr_emb is not None:
-                        d_app = compute_appearance_distance(det["emb"], trk.curr_emb)
-                    else:
-                        d_app = 0.5  # Neutral default
+                # ALL classes appearance fusion
+                # Motion consistency cost component
+                cost_motion = d_center / G
+                
+                # Appearance cost component (deep + color hist)
+                if "emb" in det and trk.curr_emb is not None:
+                    d_app = compute_appearance_distance(det["emb"], trk.curr_emb)
+                else:
+                    d_app = 0.5  # Neutral default
 
-                    # Fused cost formula: 40% IoU distance, 20% Motion penalty, 40% Appearance distance
-                    cost[r, c] = 0.4 * (1.0 - iou_mat[r, c]) + 0.2 * cost_motion + 0.4 * d_app
+                # Fused cost formula: 40% DIoU distance, 20% Motion penalty, 40% Appearance distance
+                cost[r, c] = 0.4 * (1.0 - diou_mat[r, c]) + 0.2 * cost_motion + 0.4 * d_app
 
     row_ind, col_ind = linear_sum_assignment(cost)
 
@@ -247,16 +300,23 @@ class STrack:
         self.score      = score
         self.class_id   = class_id
         self.class_name = class_name
+        self.class_history = {class_id: 1}
+        self.class_name_map = {class_id: class_name}
 
         self.state          = TrackState.New
         self.is_activated   = False
-        self.tracklet_len   = 0
-        self.lost_frames    = 0
         self.frame_id       = 0
+        self.tracklet_len   = 0
         self.start_frame    = 0
+        self.lost_frames    = 0
+        self.last_reactivated_frame = -1
+        
+        # OCSORT: Keep track of the last confident observation
+        x1, y1, x2, y2 = bbox_xyxy
+        self.last_valid_cx = (x1 + x2) / 2.0
+        self.last_valid_cy = (y1 + y2) / 2.0
 
         self.curr_emb: Optional[Dict[str, np.ndarray]] = None
-        self.last_reactivated_frame: int = -1
 
         self._init_kalman(bbox_xyxy)
 
@@ -297,22 +357,9 @@ class STrack:
             [0, 0, 0, 0, 0, 0, 0, 1],
         ], dtype=np.float32)
 
-        # Q: process noise, R: measurement noise (Class-aware parameters)
-        if self.class_id == 3:  # motorcycle
-            # Responsive parameters for rapid acceleration and sudden direction changes
-            self.kf.processNoiseCov = np.diag(
-                [2.0, 2.0, 2.0, 2.0, 0.2, 0.2, 0.01, 0.01]
-            ).astype(np.float32)
-            self.kf.measurementNoiseCov = np.diag(
-                [2.0, 2.0, 2.0, 2.0]
-            ).astype(np.float32)
-        else:
-            self.kf.processNoiseCov = np.diag(
-                [1.0, 1.0, 1.0, 1.0, 0.01, 0.01, 1e-4, 1e-4]
-            ).astype(np.float32)
-            self.kf.measurementNoiseCov = np.diag(
-                [5.0, 5.0, 5.0, 5.0]
-            ).astype(np.float32)
+        # Noise matrices will be updated dynamically based on size
+        self.kf.processNoiseCov = np.eye(8, dtype=np.float32)
+        self.kf.measurementNoiseCov = np.eye(4, dtype=np.float32)
 
         init = np.array(
             [cx, cy, w, h, 0.0, 0.0, 0.0, 0.0], dtype=np.float32
@@ -322,6 +369,39 @@ class STrack:
         # High initial uncertainty
         self.kf.errorCovPre  = np.eye(8, dtype=np.float32) * 100.0
         self.kf.errorCovPost = np.eye(8, dtype=np.float32) * 100.0
+        
+        self._update_noise_matrices(w, h)
+
+    def _update_noise_matrices(self, w: float, h: float, confidence: float = 1.0) -> None:
+        """Update Kalman filter noise matrices dynamically scaled by size, class, and confidence."""
+        # Baseline noise scaling factors
+        std_weight_position = 1.0 / 20
+        std_weight_velocity = 1.0 / 160
+        
+        # Layer 3: Class-Specific Kalman Physics
+        # Determine class if available (can be None during init)
+        cls_id = getattr(self, "class_id", None)
+        if cls_id == 3:  # Motorcycle (high agility)
+            std_weight_position *= 1.5
+            std_weight_velocity *= 2.0
+        elif cls_id == 5:  # Bus (low agility, extreme momentum)
+            std_weight_position *= 0.5
+            std_weight_velocity *= 0.2
+
+        sz = max(w, h)
+        p_std = std_weight_position * sz
+        v_std = std_weight_velocity * sz
+        
+        # Process noise Q
+        q = np.diag([p_std, p_std, p_std, p_std, v_std, v_std, v_std, v_std]) ** 2
+        
+        # Layer 8: Uncertainty Estimation
+        # Lower YOLO confidence = exponentially higher measurement uncertainty
+        uncertainty_factor = 1.0 + (1.0 - confidence) * 5.0
+        r = np.diag([p_std, p_std, p_std, p_std]) ** 2 * uncertainty_factor
+            
+        self.kf.processNoiseCov = q.astype(np.float32)
+        self.kf.measurementNoiseCov = r.astype(np.float32)
 
     # ---- appearance update helper --------------------------------------------
 
@@ -349,6 +429,11 @@ class STrack:
 
     def predict(self) -> None:
         """Advance Kalman filter by one time step."""
+        # Dynamically scale process noise using current state bounds
+        s = self.kf.statePost.flatten()
+        w, h = max(1.0, float(s[2])), max(1.0, float(s[3]))
+        self._update_noise_matrices(w, h)
+        
         self.kf.predict()
         if self.state == TrackState.Lost:
             self.lost_frames += 1
@@ -371,10 +456,38 @@ class STrack:
         emb:        Optional[Dict[str, np.ndarray]] = None,
     ) -> None:
         """Recover a previously Lost track."""
-        self._kalman_correct(bbox_xyxy)
-        self.score      = score
-        self.class_id   = class_id
-        self.class_name = class_name
+        # OOS: Observation-Centric Online Smoothing
+        # If the track was lost for multiple frames, the Kalman filter has drifted.
+        # We mathematically reconstruct the missing velocity vector to snap it back.
+        gap = frame_id - self.frame_id
+        if gap > 1:
+            x1, y1, x2, y2 = bbox_xyxy
+            new_cx = (x1 + x2) / 2.0
+            new_cy = (y1 + y2) / 2.0
+            
+            vx = (new_cx - self.last_valid_cx) / gap
+            vy = (new_cy - self.last_valid_cy) / gap
+            
+            self.kf.statePost[0, 0] = new_cx
+            self.kf.statePost[1, 0] = new_cy
+            self.kf.statePost[4, 0] = vx
+            self.kf.statePost[5, 0] = vy
+            # Reset error covariance to trust the new observation
+            self.kf.errorCovPost = np.eye(8, dtype=np.float32) * 10.0
+
+        self._kalman_correct(bbox_xyxy, score)
+        self.score = score
+        
+        # Update last valid position
+        self.last_valid_cx = (bbox_xyxy[0] + bbox_xyxy[2]) / 2.0
+        self.last_valid_cy = (bbox_xyxy[1] + bbox_xyxy[3]) / 2.0
+        
+        # Majority class voting
+        self.class_name_map[class_id] = class_name
+        self.class_history[class_id] = self.class_history.get(class_id, 0) + 1
+        self.class_id = max(self.class_history.items(), key=lambda x: x[1])[0]
+        self.class_name = self.class_name_map[self.class_id]
+
         self.state      = TrackState.Tracked
         self.lost_frames = 0
         self.frame_id   = frame_id
@@ -393,10 +506,19 @@ class STrack:
         emb:        Optional[Dict[str, np.ndarray]] = None,
     ) -> None:
         """Update an active track with a new matched detection."""
-        self._kalman_correct(bbox_xyxy)
-        self.score      = score
-        self.class_id   = class_id
-        self.class_name = class_name
+        self._kalman_correct(bbox_xyxy, score)
+        self.score = score
+        
+        # Update last valid position
+        self.last_valid_cx = (bbox_xyxy[0] + bbox_xyxy[2]) / 2.0
+        self.last_valid_cy = (bbox_xyxy[1] + bbox_xyxy[3]) / 2.0
+        
+        # Majority class voting
+        self.class_name_map[class_id] = class_name
+        self.class_history[class_id] = self.class_history.get(class_id, 0) + 1
+        self.class_id = max(self.class_history.items(), key=lambda x: x[1])[0]
+        self.class_name = self.class_name_map[self.class_id]
+
         self.state      = TrackState.Tracked
         self.lost_frames = 0
         self.frame_id   = frame_id
@@ -409,14 +531,33 @@ class STrack:
         self.state       = TrackState.Lost
         self.lost_frames = 0
 
+    def get_max_lost_frames(self, base_buffer: int, motorcycle_buffer: int) -> int:
+        """Dynamically scale the allowed lost buffer (Layer 5: Adaptive Track Buffer)."""
+        # Base class buffer
+        buf = motorcycle_buffer if self.class_id == 3 else base_buffer
+        
+        # Scale up if it's a very long, established track (up to 2x buffer)
+        len_factor = min(2.0, max(1.0, self.tracklet_len / 30.0))
+        
+        # Scale down if it was low confidence when we lost it (down to 0.5x buffer)
+        conf_factor = max(0.5, self.score)
+        
+        # Motorcycles get extra boost if long-tracked (to handle shadow occlusions)
+        if self.class_id == 3 and self.tracklet_len > 15:
+            len_factor = max(len_factor, 1.5)
+            
+        return int(buf * len_factor * conf_factor)
+
     # ---- Kalman helper -------------------------------------------------------
 
-    def _kalman_correct(self, bbox_xyxy: List[float]) -> None:
+    def _kalman_correct(self, bbox_xyxy: List[float], confidence: float = 1.0) -> None:
         x1, y1, x2, y2 = bbox_xyxy
         cx = (x1 + x2) / 2.0
         cy = (y1 + y2) / 2.0
         w  = max(1.0, x2 - x1)
         h  = max(1.0, y2 - y1)
+        self._update_noise_matrices(w, h, confidence)
+        
         meas = np.array([cx, cy, w, h], dtype=np.float32).reshape(4, 1)
         self.kf.correct(meas)
 
@@ -469,7 +610,7 @@ class BYTETracker:
         match_thresh: float = 0.80,
         track_buffer: int   = 30,
         min_hits:     int   = 3,
-        class_aware:  bool  = True,
+        class_aware:  bool  = False,
         motorcycle_track_buffer: int = 60,
         motorcycle_match_thresh: float = 0.70,
         device: Optional[str] = None,
@@ -522,12 +663,12 @@ class BYTETracker:
         """
         self.frame_id += 1
 
-        # ---- Extract appearance embeddings for motorcycles ------------------
-        motorcycle_dets = [d for d in detections if d["class_id"] == 3]
-        if motorcycle_dets and frame is not None:
+        # ---- Extract appearance embeddings for ALL valid detections -----------
+        valid_dets = [d for d in detections if d["confidence"] >= self.low_thresh]
+        if valid_dets and frame is not None:
             crops = []
             H_f, W_f = frame.shape[:2]
-            for d in motorcycle_dets:
+            for d in valid_dets:
                 x1, y1, x2, y2 = d["bbox"]
                 rx1 = max(0, int(round(x1)))
                 ry1 = max(0, int(round(y1)))
@@ -539,7 +680,7 @@ class BYTETracker:
                     crops.append(np.zeros((10, 10, 3), dtype=np.uint8))
             
             embs = self.reid_extractor.extract_combined(crops)
-            for d, emb in zip(motorcycle_dets, embs):
+            for d, emb in zip(valid_dets, embs):
                 d["emb"] = emb
 
         # ---- split detections by confidence ---------------------------------
@@ -605,65 +746,62 @@ class BYTETracker:
             if t.track_id not in activated_ids and t.state == TrackState.Tracked:
                 t.mark_lost()
 
-        # ---- Secondary Reconnection Heuristic for Motorcycles ----------------
+        # ---- Stage 3: OCR (Observation-Centric Recovery) ---------------------
+        # Match remaining high-conf detections to Lost tracks using last_valid
+        # position (ignoring drifted Kalman filter predictions).
         reconnected_det_indices = []
         for d_idx in unmatched_high:
             det = dets_high[d_idx]
-            if det["class_id"] != 3:
-                continue
-
             det_bbox = det["bbox"]
-            det_w = det_bbox[2] - det_bbox[0]
-            det_h = det_bbox[3] - det_bbox[1]
             det_cx = (det_bbox[0] + det_bbox[2]) / 2.0
             det_cy = (det_bbox[1] + det_bbox[3]) / 2.0
+            det_w = det_bbox[2] - det_bbox[0]
+            det_h = det_bbox[3] - det_bbox[1]
             sz = max(det_w, det_h)
 
             best_lost_track = None
             best_recon_score = -1.0
-            gap = 0
 
             for t in self.lost_stracks:
-                if t.class_id != 3:
-                    continue
-
                 curr_gap = self.frame_id - t.frame_id
                 if not (2 <= curr_gap <= 30):
                     continue
 
+                # Class penalty
+                class_penalty = 0.0
+                if self.class_aware and det["class_id"] != t.class_id:
+                    continue
+                elif det["class_id"] != t.class_id:
+                    class_penalty = 0.2
+
                 # Size ratio check
                 t_bbox = t.bbox_xyxy
-                t_w = t_bbox[2] - t_bbox[0]
-                t_h = t_bbox[3] - t_bbox[1]
+                t_w = max(1.0, float(t_bbox[2] - t_bbox[0]))
+                t_h = max(1.0, float(t_bbox[3] - t_bbox[1]))
                 if not (0.6 <= det_w / t_w <= 1.6) or not (0.6 <= det_h / t_h <= 1.6):
                     continue
 
-                # Extrapolate position using velocity from statePost
-                cx_last = float(t.kf.statePost[0, 0])
-                cy_last = float(t.kf.statePost[1, 0])
-                vcx = float(t.kf.statePost[4, 0])
-                vcy = float(t.kf.statePost[5, 0])
-                cx_extrap = cx_last + vcx * curr_gap
-                cy_extrap = cy_last + vcy * curr_gap
-
-                d_extrap = np.hypot(det_cx - cx_extrap, det_cy - cy_extrap)
-                if d_extrap > 3.0 * sz:
+                # OCSORT OCR: Spatial distance using last valid observation!
+                d_spatial = np.hypot(det_cx - t.last_valid_cx, det_cy - t.last_valid_cy)
+                
+                # Dynamic search radius based on gap and object size
+                max_dist = max(3.0 * sz, 1.5 * sz * np.sqrt(curr_gap))
+                if d_spatial > max_dist:
                     continue
 
-                # Appearance similarity check
+                # Appearance similarity check (if available, e.g., motorcycles)
                 if "emb" in det and t.curr_emb is not None:
                     d_app = compute_appearance_distance(det["emb"], t.curr_emb)
+                    if d_app >= 0.35:
+                        continue
+                    recon_score = (1.0 - d_app) * (1.0 - d_spatial / max_dist) - class_penalty
                 else:
-                    d_app = 0.5  # Neutral default
+                    # Spatial-only score
+                    recon_score = (1.0 - d_spatial / max_dist) - class_penalty
 
-                if d_app >= 0.25:
-                    continue
-
-                recon_score = (1.0 - d_app) * (1.0 - d_extrap / (3.0 * sz))
-                if recon_score > best_recon_score:
+                if recon_score > best_recon_score and recon_score > 0.1:
                     best_recon_score = recon_score
                     best_lost_track = t
-                    gap = curr_gap
 
             if best_lost_track is not None:
                 # Reconnect original ID!
@@ -671,12 +809,12 @@ class BYTETracker:
                 t.re_activate(det["bbox"], det["confidence"],
                                det["class_id"], det["class_name"], self.frame_id, det.get("emb"))
                 self.tracked_stracks.append(t)
-                if t in self.lost_stracks:
-                    self.lost_stracks.remove(t)
+                self.lost_stracks.remove(t)
                 reconnected_det_indices.append(d_idx)
+                activated_ids.add(t.track_id)
                 logger.info(
-                    "Reconnected fragmented track ID %d for motorcycle after gap of %d frames.",
-                    t.track_id, gap
+                    "OCR: Reconnected fragmented track ID %d for %s after gap of %d frames.",
+                    t.track_id, t.class_name, self.frame_id - t.frame_id
                 )
 
         unmatched_high = [i for i in unmatched_high if i not in reconnected_det_indices]
@@ -706,11 +844,11 @@ class BYTETracker:
                 seen.add(t.track_id)
         self.tracked_stracks = deduped
 
-        # Keep only non-expired Lost tracks (Class-aware buffer check)
+        # Keep only non-expired Lost tracks (Layer 5: Adaptive track buffer check)
         self.lost_stracks = [
             t for t in all_known
             if t.state == TrackState.Lost and
-               t.lost_frames < (self.motorcycle_track_buffer if t.class_id == 3 else self.track_buffer)
+               t.lost_frames < t.get_max_lost_frames(self.track_buffer, self.motorcycle_track_buffer)
         ]
         # Deduplicate lost
         seen = set()
