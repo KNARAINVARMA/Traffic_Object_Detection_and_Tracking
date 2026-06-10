@@ -42,7 +42,9 @@ from tqdm import tqdm
 
 from detection import Detector
 from export import Exporter
-from homography import CoordinateMapper
+from coordinate_mapping import CoordinateMapper
+from diagnostics import run_diagnostics
+from bayesian_controller import BayesianController, SceneProfiler
 from smoothing import MovingAverageSmoother
 from tracker import BYTETracker, STrack
 from utils import ensure_dir, format_stats, setup_logging
@@ -226,6 +228,34 @@ def parse_tile_grid(s: str):
 
 
 # ---------------------------------------------------------------------------
+# Helper: Output Buffer for Retrospective Smoothing (Layer 4)
+# ---------------------------------------------------------------------------
+class OutputBuffer:
+    def __init__(self, delay: int = 10):
+        self.delay = delay
+        self.buffer = []
+        self.id_merges = {}
+        
+    def push(self, frame_idx: int, frame: np.ndarray, enriched: List[Dict], exporter, anomaly_detector):
+        # Apply retrospective ID merges (from Layer 4 self-correction)
+        for t in enriched:
+            original_id = t["track_id"]
+            while t["track_id"] in self.id_merges:
+                t["track_id"] = self.id_merges[t["track_id"]]
+                
+        self.buffer.append((frame_idx, frame, enriched))
+        
+        if len(self.buffer) > self.delay:
+            f_idx, f_img, f_enr = self.buffer.pop(0)
+            exporter.process_frame(f_idx, f_img, f_enr)
+            
+    def flush(self, exporter):
+        for f_idx, f_img, f_enr in self.buffer:
+            exporter.process_frame(f_idx, f_img, f_enr)
+        self.buffer = []
+
+
+# ---------------------------------------------------------------------------
 # Main pipeline
 # ---------------------------------------------------------------------------
 
@@ -322,11 +352,23 @@ def run(args: argparse.Namespace) -> dict:
 
     # Reset ByteTrack ID counter for reproducibility between runs
     STrack.reset_id_counter()
+    
+    # Phase 3: Meta-Learning Scene Profiler
+    scene_name = Path(args.input).stem if args.input else "camera_01"
+    profiler = SceneProfiler()
+    profile = profiler.load_profile(scene_name)
+    
+    bayesian = BayesianController()
+    if profile:
+        bayesian.current_track_buffer = profile.get("track_buffer", args.track_buffer)
+        bayesian.current_match_thresh = profile.get("match_thresh", args.match_thresh)
+        logger.info(f"Loaded Meta-Learning Profile for {scene_name}. Buffer: {bayesian.current_track_buffer}, Thresh: {bayesian.current_match_thresh}")
+
     tracker = BYTETracker(
         high_thresh  = args.high_thresh,
         low_thresh   = args.low_thresh,
-        match_thresh = args.match_thresh,
-        track_buffer = args.track_buffer,
+        match_thresh = bayesian.current_match_thresh,
+        track_buffer = bayesian.current_track_buffer,
         min_hits     = args.min_hits,
         motorcycle_track_buffer = args.motorcycle_track_buffer,
         motorcycle_match_thresh = args.motorcycle_match_thresh,
@@ -369,6 +411,7 @@ def run(args: argparse.Namespace) -> dict:
     }
 
     # ---- Main loop ----------------------------------------------------------
+    output_buffer = OutputBuffer(delay=10)
     with Exporter(
         fps               = fps,
         output_video_path = output_video,
@@ -412,6 +455,13 @@ def run(args: argparse.Namespace) -> dict:
 
                 total_detections += len(detections)
 
+                # Phase 3: Bayesian Hyperparameter Scaling
+                if frame_idx % 30 == 0:
+                    bayesian.update_priors(tracker.anomaly_detector.anomaly_log)
+                    active_params = bayesian.get_active_params()
+                    tracker.track_buffer = active_params["track_buffer"]
+                    tracker.match_thresh = active_params["match_thresh"]
+
                 # 2. Track
                 tracks = tracker.update(detections, frame)
 
@@ -436,8 +486,8 @@ def run(args: argparse.Namespace) -> dict:
                         "world_y":     wy,
                     })
 
-                # 4. Export
-                exporter.process_frame(frame_idx, frame, enriched)
+                # 4. Export (Phase 2: Retrospective Delayed Output)
+                output_buffer.push(frame_idx, frame.copy(), enriched, exporter, tracker.anomaly_detector)
 
                 frame_idx += 1
                 pbar.update(1)
@@ -447,7 +497,13 @@ def run(args: argparse.Namespace) -> dict:
                     ids=len(total_track_ids),
                 )
 
+        # Flush remaining frames before Exporter closes
+        output_buffer.flush(exporter)
+
     cap.release()
+    
+    # Save optimized parameters to Scene Profile
+    profiler.save_profile(scene_name, bayesian.get_active_params())
 
     elapsed = time.perf_counter() - t_start
 

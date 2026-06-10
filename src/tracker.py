@@ -62,9 +62,11 @@ from typing import Dict, List, Optional, Tuple
 # pyrefly: ignore [missing-import]
 import cv2
 import numpy as np
+import scipy.linalg
 from scipy.optimize import linear_sum_assignment
 
 from reid import ReIDExtractor, compute_appearance_distance
+from anomaly_detector import AnomalyDetector
 
 logger = logging.getLogger(__name__)
 
@@ -631,6 +633,9 @@ class BYTETracker:
 
         # Initialize appearance feature extractor
         self.reid_extractor = ReIDExtractor(device=device)
+        
+        # Initialize anomaly detector
+        self.anomaly_detector = AnomalyDetector()
 
         logger.info(
             "BYTETracker — high_thresh=%.2f  low_thresh=%.2f  match_thresh=%.2f  "
@@ -884,4 +889,8 @@ class BYTETracker:
             len(self.lost_stracks),
             len(output),
         )
+        
+        # Phase 1 & 4: Real-time anomaly observation & Active Learning Edge-Mining
+        self.anomaly_detector.observe(self.tracked_stracks, self.frame_id, frame)
+        
         return output
