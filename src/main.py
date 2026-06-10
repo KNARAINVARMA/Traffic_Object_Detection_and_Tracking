@@ -37,6 +37,9 @@ import sys
 import time
 from pathlib import Path
 
+# Add the 'src' directory to Python path to support importing local modules directly
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 import cv2
 from tqdm import tqdm
 
