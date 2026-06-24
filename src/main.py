@@ -113,10 +113,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Model weights file (defaults: rtdetr-l.pt for sahi_rtdetr, yolov8m.pt for yolov8).",
     )
     det.add_argument("--imgsz",  type=int,   default=1280, help="YOLO input image size.")
-    det.add_argument("--conf",   type=float, default=0.25, help="Detection confidence threshold.")
+    det.add_argument("--conf",   type=float, default=0.10, help="Detection confidence threshold.")
     det.add_argument("--iou",    type=float, default=0.50, help="NMS IoU threshold.")
     det.add_argument(
-        "--tile-grid", default="2x2",
+        "--tile-grid", default="3x3",
         help="Tiling grid as ROWSxCOLS (e.g. '2x2' or '3x3') for YOLOv8. Use '1x1' to disable tiling.",
     )
     det.add_argument("--tile-overlap", type=float, default=0.20,
@@ -127,9 +127,9 @@ def build_parser() -> argparse.ArgumentParser:
                      help="SAHI slice height.")
     det.add_argument("--slice-width", type=int, default=512,
                      help="SAHI slice width.")
-    det.add_argument("--overlap-height-ratio", type=float, default=0.30,
+    det.add_argument("--overlap-height-ratio", type=float, default=0.40,
                      help="SAHI slice overlap height ratio.")
-    det.add_argument("--overlap-width-ratio", type=float, default=0.30,
+    det.add_argument("--overlap-width-ratio", type=float, default=0.40,
                      help="SAHI slice overlap width ratio.")
     det.add_argument("--device", default=None,
                      help="Inference device: 'cuda', 'cpu', 'mps', or '0' for GPU index.")
@@ -154,9 +154,9 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Max pixel width for a car before it gets relabeled as a motorcycle.")
     vpost.add_argument("--car-max-motorcycle-height", type=float, default=40.0,
                        help="Max pixel height for a car before it gets relabeled as a motorcycle.")
-    vpost.add_argument("--person-conf-thresh", type=float, default=0.25,
+    vpost.add_argument("--person-conf-thresh", type=float, default=0.15,
                        help="Confidence threshold for person detections.")
-    vpost.add_argument("--motorcycle-conf-thresh", type=float, default=0.15,
+    vpost.add_argument("--motorcycle-conf-thresh", type=float, default=0.10,
                        help="Confidence threshold for motorcycle detections.")
     vpost.add_argument("--debug-trucks", action="store_true",
                        help="Enable saving cropped truck detections for manual debugging.")
