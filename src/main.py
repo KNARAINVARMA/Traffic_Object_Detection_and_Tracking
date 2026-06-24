@@ -170,14 +170,16 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Minimum score for Stage-2 (occlusion recovery) matching.")
     trk.add_argument("--match-thresh", type=float, default=0.80,
                      help="Max IoU-distance to accept a Stage-1 match (0.8 → IoU ≥ 0.2).")
-    trk.add_argument("--track-buffer", type=int,   default=30,
-                     help="Frames a Lost track is kept before deletion (30 @ 25 fps = 1.2 s).")
-    trk.add_argument("--motorcycle-track-buffer", type=int, default=60,
+    trk.add_argument("--track-buffer", type=int,   default=60,
+                     help="Frames a Lost track is kept before deletion (60 @ 25 fps = 2.4 s).")
+    trk.add_argument("--motorcycle-track-buffer", type=int, default=120,
                      help="Frames a Lost motorcycle track is kept before deletion.")
     trk.add_argument("--motorcycle-match-thresh", type=float, default=0.70,
                      help="Max distance threshold to accept a Stage-1 motorcycle match.")
     trk.add_argument("--min-hits",     type=int,   default=3,
                      help="Consecutive frames before a new track appears in output.")
+    trk.add_argument("--class-aware", action=argparse.BooleanOptionalAction, default=True,
+                     help="Enable class-aware tracking to prevent cross-class ID stealing.")
 
     # ---- Smoothing ----------------------------------------------------------
     smo = p.add_argument_group("Smoothing")
@@ -328,6 +330,7 @@ def run(args: argparse.Namespace) -> dict:
         match_thresh = args.match_thresh,
         track_buffer = args.track_buffer,
         min_hits     = args.min_hits,
+        class_aware  = args.class_aware,
         motorcycle_track_buffer = args.motorcycle_track_buffer,
         motorcycle_match_thresh = args.motorcycle_match_thresh,
         device       = args.device,
