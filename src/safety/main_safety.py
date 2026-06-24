@@ -59,6 +59,18 @@ def main() -> None:
                         help="Override per-class minimums and use this value for all classes")
     parser.add_argument("--preview-zone", action="store_true",
                         help="Save a zone overlay image for calibration and exit")
+    parser.add_argument("--detect-unsafe-shortcuts", action="store_true",
+                        help="Run unsafe roundabout shortcut detection and save violations CSV")
+    parser.add_argument("--unsafe-shortcut-output", default=None,
+                        help="Path to write unsafe shortcut violations CSV")
+    parser.add_argument("--detect-unsafe-overtaking", action="store_true",
+                        help="Run unsafe overtaking detection and save violations CSV")
+    parser.add_argument("--unsafe-overtaking-output", default=None,
+                        help="Path to write unsafe overtaking violations CSV")
+    parser.add_argument("--annotate-unsafe-overtaking", action="store_true",
+                        help="Annotate unsafe overtaking violations on the output video")
+    parser.add_argument("--unsafe-overtaking-video-output", default=None,
+                        help="Path to write unsafe overtaking annotated video")
     args = parser.parse_args()
 
     if args.preview_zone:
@@ -67,7 +79,9 @@ def main() -> None:
 
     from .conflict_detector import load_tracks, detect_conflicts, MIN_TRACK_LENGTH_BY_CLASS
     from .aggressor_classifier import classify_aggressor
-    from .safety_reporter import write_conflict_csv, annotate_video
+    from .safety_reporter import write_conflict_csv, annotate_video, annotate_overtaking_video
+    from .unsafe_roundabout_shortcut_rule import detect_unsafe_roundabout_shortcuts
+    from .unsafe_overtaking_rule import detect_unsafe_overtaking
 
     if args.override_min_track_length is not None:
         for k in list(MIN_TRACK_LENGTH_BY_CLASS.keys()):
@@ -100,11 +114,38 @@ def main() -> None:
     write_conflict_csv(results, csv_out)
     annotate_video(results, tracks, args.video, video_out, args.delta)
 
+    if args.detect_unsafe_shortcuts:
+        unsafe_out = args.unsafe_shortcut_output or os.path.join(
+            args.output_dir, f"{video_stem}_unsafe_shortcut_violations.csv"
+        )
+        print(f"[main] Running unsafe roundabout shortcut detection → {unsafe_out}")
+        detect_unsafe_roundabout_shortcuts(args.csv, unsafe_out)
+
+    if args.detect_unsafe_overtaking:
+        overtaking_out = args.unsafe_overtaking_output or os.path.join(
+            args.output_dir, f"{video_stem}_unsafe_overtaking_violations.csv"
+        )
+        print(f"[main] Running unsafe overtaking detection → {overtaking_out}")
+        detect_unsafe_overtaking(args.csv, overtaking_out)
+
+        if args.annotate_unsafe_overtaking:
+            overtaking_video_out = args.unsafe_overtaking_video_output or os.path.join(
+                args.output_dir, f"{video_stem}_unsafe_overtaking_annotated.mp4"
+            )
+            print(f"[main] Annotating unsafe overtaking video → {overtaking_video_out}")
+            annotate_overtaking_video(overtaking_out, tracks, args.video, overtaking_video_out)
+
     print("\n[main] === Summary ===")
     print(f"  Total conflicts   : {len(results)}")
     print(f"  Methods agree     : {agreed}")
     print(f"  CSV               : {csv_out}")
     print(f"  Video             : {video_out}")
+    if args.detect_unsafe_shortcuts:
+        print(f"  Unsafe shortcuts  : {unsafe_out}")
+    if args.detect_unsafe_overtaking:
+        print(f"  Unsafe overtaking: {overtaking_out}")
+    if args.detect_unsafe_overtaking and args.annotate_unsafe_overtaking:
+        print(f"  Unsafe overtaking video: {overtaking_video_out}")
 
 
 if __name__ == "__main__":

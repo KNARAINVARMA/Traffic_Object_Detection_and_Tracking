@@ -1,0 +1,130 @@
+import pandas as pd
+import numpy as np
+from pathlib import Path
+
+X_C = 43.5
+Y_C = 28.5
+R_INNER = 6.0
+R_OUTER = 14.0
+CONGESTION_THRESHOLD = 2
+
+STRAIGHT_MOVEMENTS = {
+    ("NORTH", "SOUTH"),
+    ("SOUTH", "NORTH"),
+    ("EAST", "WEST"),
+    ("WEST", "EAST"),
+}
+
+TURNING_MOVEMENTS = {
+    ("EAST", "NORTH"),
+    ("EAST", "SOUTH"),
+    ("WEST", "NORTH"),
+    ("WEST", "SOUTH"),
+    ("NORTH", "EAST"),
+    ("NORTH", "WEST"),
+    ("SOUTH", "EAST"),
+    ("SOUTH", "WEST"),
+}
+
+
+def determine_direction(dx: float, dy: float) -> str:
+    if abs(dx) >= abs(dy):
+        return "EAST" if dx > 0 else "WEST"
+    return "NORTH" if dy > 0 else "SOUTH"
+
+
+def _is_turning(entry_direction: str, exit_direction: str) -> bool:
+    return (entry_direction, exit_direction) in TURNING_MOVEMENTS
+
+
+def detect_unsafe_roundabout_shortcuts(csv_file: str, output_csv_path: str | Path | None = None):
+    try:
+        df = pd.read_csv(csv_file)
+    except FileNotFoundError:
+        print(f"Error: The file '{csv_file}' was not found.")
+        return
+
+    required_columns = {"track_id", "frame", "world_x", "world_y", "class_name"}
+    if not required_columns.issubset(df.columns):
+        missing = required_columns - set(df.columns)
+        raise ValueError(f"Missing required columns in input CSV: {sorted(missing)}")
+
+    if output_csv_path is None:
+        output_csv_path = Path(__file__).resolve().parent / "unsafe_shortcut_violations.csv"
+    output_csv_path = Path(output_csv_path)
+    output_csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+    df = df.copy()
+    df["dx"] = df["world_x"] - X_C
+    df["dy"] = df["world_y"] - Y_C
+    df["r"] = np.sqrt(df["dx"] ** 2 + df["dy"] ** 2)
+
+    frame_groups = {frame: group for frame, group in df.groupby("frame")}
+    violations = []
+
+    for track_id, track in df.groupby("track_id"):
+        track = track.sort_values("frame")
+        if len(track) < 2:
+            continue
+
+        first = track.iloc[0]
+        last = track.iloc[-1]
+        entry_direction = determine_direction(first["dx"], first["dy"])
+        exit_direction = determine_direction(last["dx"], last["dy"])
+
+        if (entry_direction, exit_direction) in STRAIGHT_MOVEMENTS:
+            continue
+        if not _is_turning(entry_direction, exit_direction):
+            continue
+
+        entered_roundabout = (track["r"] < R_INNER).any()
+        if entered_roundabout:
+            continue
+
+        conflict_frames = []
+        for _, row in track.iterrows():
+            same_frame = frame_groups[row["frame"]]
+            other_vehicles = same_frame[same_frame["track_id"] != track_id]
+            other_in_outer = (other_vehicles["r"] < R_OUTER).sum()
+            if other_in_outer >= CONGESTION_THRESHOLD:
+                conflict_frames.append(int(row["frame"]))
+
+        if not conflict_frames:
+            continue
+
+        violation_start_frame = min(conflict_frames)
+        class_name = str(track["class_name"].iloc[0])
+        reason = (
+            f"{entry_direction} to {exit_direction} shortcut without roundabout traversal during congestion"
+        )
+
+        violations.append({
+            "track_id": int(track_id),
+            "class_name": class_name,
+            "entry_direction": entry_direction,
+            "exit_direction": exit_direction,
+            "violation_start_frame": int(violation_start_frame),
+            "violation_type": "Unsafe Roundabout Shortcut",
+            "reason": reason,
+        })
+
+    output_df = pd.DataFrame(
+        violations,
+        columns=[
+            "track_id",
+            "class_name",
+            "entry_direction",
+            "exit_direction",
+            "violation_start_frame",
+            "violation_type",
+            "reason",
+        ],
+    )
+    output_df.to_csv(output_csv_path, index=False)
+    print(f"Saved {len(output_df)} unsafe roundabout shortcut violation(s) → {output_csv_path}")
+    return output_csv_path
+
+
+if __name__ == "__main__":
+    default_tracks = Path(__file__).resolve().parent.parent / "outputs" / "csv" / "full1_tracks.csv"
+    detect_unsafe_roundabout_shortcuts(default_tracks)

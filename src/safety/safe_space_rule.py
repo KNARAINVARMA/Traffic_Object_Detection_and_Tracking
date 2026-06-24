@@ -61,7 +61,6 @@ tailgating_records = []
 for (frame, lane), group in ring_df.groupby(['frame', 'lane']):
     if len(group) < 2:
         continue
-    
     # Sort by theta
     sorted_group = group.sort_values('theta').to_dict('records')
     n = len(sorted_group)

@@ -1,13 +1,19 @@
 import pandas as pd
 import numpy as np
+from pathlib import Path
 
-def detect_wrong_way_violations(csv_file):
+def detect_wrong_way_violations(csv_file, output_csv_path=None):
     # Load dataset
     try:
         df = pd.read_csv(csv_file)
     except FileNotFoundError:
         print(f"Error: The file '{csv_file}' was not found.")
         return
+
+    if output_csv_path is None:
+        output_csv_path = Path(__file__).resolve().parent / 'wrong_way.csv'
+    output_csv_path = Path(output_csv_path)
+    output_csv_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Constants
     X_c = 43.5
@@ -68,10 +74,23 @@ def detect_wrong_way_violations(csv_file):
                     'start_frame': int(violation_start_frame)
                 }
 
-    # Prepare outputs
-    if not violations:
+    # Prepare output rows
+    output_rows = []
+    for track_id, info in violations.items():
+        output_rows.append({
+            'track_id': int(track_id),
+            'class_name': info['class_name'],
+            'start_frame': int(info['start_frame']),
+            'violation_type': 'Wrong-Way'
+        })
+
+    output_df = pd.DataFrame(output_rows, columns=['track_id', 'class_name', 'start_frame', 'violation_type'])
+    output_df.to_csv(output_csv_path, index=False)
+    print(f"\nSaved wrong-way violation records to: {output_csv_path}")
+
+    if output_df.empty:
         print("No Wrong-Way Driving Violations detected.")
-        return
+        return output_csv_path
 
     print("--- Wrong-Way Driving Violations Summary ---")
     
@@ -89,7 +108,10 @@ def detect_wrong_way_violations(csv_file):
     for track_id, info in violations.items():
         print(f"Track ID {track_id} (Class: {info['class_name']}) - Violation started at frame: {info['start_frame']}")
 
+    return output_csv_path
+
 if __name__ == "__main__":
     # The default execution processes the dataset specified
-    dataset_file = r"D:\btp\Traffic_Object_Detection_and_Tracking\outputs\csv\full1_tracks.csv"
-    detect_wrong_way_violations(dataset_file)
+    dataset_file = r"D:\btp\narain_data\test1.csv"
+    output_file = Path(__file__).resolve().parent / 'wrong_way.csv'
+    detect_wrong_way_violations(dataset_file, output_file)

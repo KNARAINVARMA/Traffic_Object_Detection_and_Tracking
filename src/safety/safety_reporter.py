@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import os
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 import cv2
 import numpy as np
@@ -70,7 +70,7 @@ def write_conflict_csv(results: List[ClassificationResult], output_path: str) ->
                 "ttc1_sec": round(r.ttc1, 3) if r.ttc1 != float("inf") else "inf",
                 "ttc2_sec": round(r.ttc2, 3) if r.ttc2 != float("inf") else "inf",
             })
-    print(f"[reporter] Wrote {len(results)} conflict events → {output_path}")
+    print(f"[reporter] Wrote {len(results)} conflict events -> {output_path}")
 
 
 def _filter_one_per_vehicle(results: List[ClassificationResult]) -> List[ClassificationResult]:
@@ -197,6 +197,90 @@ def _draw_overtake_events(
             p1 = (int(r_er["center_x"]), int(r_er["center_y"]))
             p2 = (int(r_ed["center_x"]), int(r_ed["center_y"]))
             cv2.line(img, p1, p2, MAGENTA, 2, cv2.LINE_AA)
+
+
+def _load_overtaking_csv(csv_path: str) -> List[Dict[str, Any]]:
+    violations: List[Dict[str, Any]] = []
+    with open(csv_path, newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if "track_id" not in row or "start_frame" not in row:
+                continue
+            violations.append({
+                "track_id": int(row["track_id"]),
+                "overtaken_vehicle_id": int(row.get("overtaken_vehicle_id", -1)),
+                "class_name": row.get("class_name", ""),
+                "start_frame": int(row["start_frame"]),
+                "location": row.get("location", ""),
+                "violation_type": row.get("violation_type", "Unsafe Overtaking"),
+                "reason": row.get("reason", ""),
+            })
+    return violations
+
+
+def _draw_unsafe_overtaking_violations(
+    img: np.ndarray,
+    violations: List[Dict[str, Any]],
+    tracks: TrackDB,
+    frame_idx: int,
+) -> None:
+    for violation in violations:
+        if frame_idx < violation["start_frame"]:
+            continue
+        track_id = violation["track_id"]
+        rec = tracks.get(track_id, {}).get(frame_idx)
+        if rec is None:
+            continue
+        x1, y1, x2, y2 = int(rec["x1"]), int(rec["y1"]), int(rec["x2"]), int(rec["y2"])
+        label = f"OVT#{track_id}"
+        cv2.rectangle(img, (x1, y1), (x2, y2), ORANGE, 3)
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
+        ty = max(y1 - 6, 16)
+        cv2.rectangle(img, (x1, ty - th - 4), (x1 + tw + 6, ty + 2), ORANGE, -1)
+        cv2.putText(img, label, (x1 + 3, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.55, BLACK, 2, cv2.LINE_AA)
+
+
+def annotate_overtaking_video(
+    csv_path: str,
+    tracks: TrackDB,
+    input_video_path: str,
+    output_video_path: str,
+) -> None:
+    print(f"[reporter] Loading unsafe overtaking violations from: {csv_path}")
+    violations = _load_overtaking_csv(csv_path)
+    if not violations:
+        print("[reporter] No unsafe overtaking violations to annotate.")
+        return
+
+    cap = cv2.VideoCapture(input_video_path)
+    if not cap.isOpened():
+        raise FileNotFoundError(f"Cannot open video: {input_video_path}")
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    os.makedirs(os.path.dirname(output_video_path), exist_ok=True)
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
+
+    frame_idx = 0
+    while True:
+        ret, img = cap.read()
+        if not ret:
+            break
+        _draw_unsafe_overtaking_violations(img, violations, tracks, frame_idx)
+        cv2.putText(img, f"frame {frame_idx}", (width - 110, height - 12),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (160, 160, 160), 1, cv2.LINE_AA)
+        out.write(img)
+        frame_idx += 1
+        if frame_idx % 100 == 0:
+            print(f"[reporter] overtaking annotated {frame_idx}/{total} frames ...")
+
+    cap.release()
+    out.release()
+    print(f"[reporter] Overtaking video -> {output_video_path}")
 
 
 def annotate_video(
@@ -337,8 +421,8 @@ def annotate_video(
         out.write(img)
         frame_idx += 1
         if frame_idx % 100 == 0:
-            print(f"[reporter] annotated {frame_idx}/{total} frames …")
+            print(f"[reporter] annotated {frame_idx}/{total} frames ...")
 
     cap.release()
     out.release()
-    print(f"[reporter] Conflict video → {output_video_path}")
+    print(f"[reporter] Conflict video -> {output_video_path}")

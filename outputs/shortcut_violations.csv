@@ -1,0 +1,5 @@
+track_id,class_name,entry_direction,exit_direction,violation_start_frame,reason
+35,motorcycle,WEST,SOUTH,774,WEST to SOUTH shortcut without roundabout traversal during congestion
+50,motorcycle,WEST,SOUTH,0,WEST to SOUTH shortcut without roundabout traversal during congestion
+187,person,WEST,SOUTH,199,WEST to SOUTH shortcut without roundabout traversal during congestion
+232,motorcycle,SOUTH,WEST,844,SOUTH to WEST shortcut without roundabout traversal during congestion
