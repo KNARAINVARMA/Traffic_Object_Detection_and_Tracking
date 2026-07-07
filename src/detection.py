@@ -90,7 +90,7 @@ class Detector:
         self,
         model_path: str = "yolov8m.pt",
         imgsz: int = 1280,
-        conf: float = 0.15,
+        conf: float = 0.10,
         iou: float = 0.5,
         use_tiling: bool = True,
         tile_grid: Tuple[int, int] = (2, 2),

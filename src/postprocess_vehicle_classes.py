@@ -36,8 +36,8 @@ def postprocess_vehicle_detections(
     car_max_motorcycle_area: float = 1600.0,
     car_max_motorcycle_width: float = 40.0,
     car_max_motorcycle_height: float = 40.0,
-    person_conf_thresh: float = 0.25,
-    motorcycle_conf_thresh: float = 0.15,
+    person_conf_thresh: float = 0.15,
+    motorcycle_conf_thresh: float = 0.10,
     debug_trucks: bool = False,
     stats: Optional[Dict] = None,
 ) -> List[Dict]:
