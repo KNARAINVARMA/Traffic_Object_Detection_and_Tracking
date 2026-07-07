@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Annotation Toolbox</title>
+    <!-- Modern Premium Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- App Container -->
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <svg class="app-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4zM14 16H6v-2h8v2zm0-4H6V8h8v4z"/>
+                </svg>
+                <h1 class="app-title">Antigravity <span>Annotation Toolbox</span></h1>
+            </div>
+            <div class="header-right">
+                <span id="active-csv-name" class="active-file-badge">No CSV Loaded</span>
+                <div id="save-status" class="save-status-pill saved">
+                    <svg class="status-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                    </svg>
+                    <span id="save-status-text">Saved to disk</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="app-body">
+            <!-- Left Sidebar -->
+            <aside class="sidebar">
+                <!-- Workspace Files Card -->
+                <section class="card" id="files-card">
+                    <div class="card-header">
+                        <svg class="card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6 10H6v-2h8v2zm4-4H6V8h12v4z"/>
+                        </svg>
+                        <h2>Workspace Files</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label for="video-select">SELECT VIDEO</label>
+                            <select id="video-select">
+                                <option value="" disabled selected>Select a video...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="csv-select">SELECT CSV TRACKS</label>
+                            <select id="csv-select">
+                                <option value="" disabled selected>Select tracks CSV...</option>
+                            </select>
+                            <div class="input-action-group" style="margin-top: 6px;">
+                                <input type="text" id="csv-path-input" placeholder="Or enter custom CSV path...">
+                                <button id="btn-load-custom-csv" class="btn btn-dark">Load</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Box Properties Card -->
+                <section class="card" id="properties-card">
+                    <div class="card-header">
+                        <svg class="card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                        </svg>
+                        <h2>Box Properties</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label>EDITING MODE</label>
+                            <div class="btn-group-row">
+                                <button id="btn-mode-select" class="btn btn-dark active">Select Box</button>
+                                <button id="btn-mode-draw" class="btn btn-dark">Draw Box</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="property-track-id">TRACK ID</label>
+                            <div class="input-action-group">
+                                <input type="number" id="property-track-id" placeholder="ID" disabled>
+                                <button id="btn-apply-id" class="btn btn-warning" disabled>Apply</button>
+                            </div>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="property-propagate-id" checked>
+                            <label for="property-propagate-id">Propagate ID to all subsequent frames</label>
+                        </div>
+                        <div class="form-group">
+                            <label for="property-class">OBJECT CLASS</label>
+                            <select id="property-class" disabled>
+                                <option value="person">Person</option>
+                                <option value="car">Car</option>
+                                <option value="motorcycle">Motorcycle</option>
+                                <option value="bus">Bus</option>
+                                <option value="truck">Truck</option>
+                            </select>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Frame Detections Card -->
+                <section class="card" id="detections-card">
+                    <div class="card-header">
+                        <svg class="card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M4 14h4v-4H4v4zm0 5h4v-4H4v4zM4 9h4V5H4v4zm5 5h12v-4H9v4zm0 5h12v-4H9v4zM9 5v4h12V5H9z"/>
+                        </svg>
+                        <h2>Frame Detections (<span id="detection-count">0</span>)</h2>
+                    </div>
+                    <div class="card-body scrollable-body">
+                        <ul id="detections-list" class="detections-list">
+                            <!-- Populated dynamically via JS -->
+                            <li class="empty-list-msg">No video/tracks loaded.</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <!-- Keyboard Shortcuts Card -->
+                <section class="card" id="shortcuts-card">
+                    <div class="card-header">
+                        <svg class="card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M20 5H4c-1.1 0-1.99.9-1.99 2L2 17c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v-2H5V8h2v5zm10-2h2v2h-2v-2zm0-3h2v2h-2V8zm-3 8H8v-2h6v2zm0-3h-2v-2h2v-2h-2V8h2v5zm3 2h-2v-2h2v2zm1 0V8h2v5h-2v2z"/>
+                        </svg>
+                        <h2>Keyboard Shortcuts</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="shortcuts-grid">
+                            <div class="shortcut-row">
+                                <span class="shortcut-key">D</span> <span class="shortcut-sep">/</span> <span class="shortcut-key">→</span> <span class="shortcut-sep">/</span> <span class="shortcut-key">+</span>
+                                <span class="shortcut-desc">Next Frame</span>
+                            </div>
+                            <div class="shortcut-row">
+                                <span class="shortcut-key">A</span> <span class="shortcut-sep">/</span> <span class="shortcut-key">←</span> <span class="shortcut-sep">/</span> <span class="shortcut-key">-</span>
+                                <span class="shortcut-desc">Prev Frame</span>
+                            </div>
+                            <div class="shortcut-row">
+                                <span class="shortcut-key">F</span> <span class="shortcut-sep">/</span> <span class="shortcut-key">↑</span>
+                                <span class="shortcut-desc">Forward 10 Frames</span>
+                            </div>
+                            <div class="shortcut-row">
+                                <span class="shortcut-key">R</span> <span class="shortcut-sep">/</span> <span class="shortcut-key">↓</span>
+                                <span class="shortcut-desc">Rewind 10 Frames</span>
+                            </div>
+                            <div class="shortcut-row">
+                                <span class="shortcut-key">Space</span> <span class="shortcut-sep">/</span> <span class="shortcut-key">P</span>
+                                <span class="shortcut-desc">Play / Pause</span>
+                            </div>
+                            <div class="shortcut-row">
+                                <span class="shortcut-key">V</span>
+                                <span class="shortcut-desc">Clone Prev Frame</span>
+                            </div>
+                            <div class="shortcut-row">
+                                <span class="shortcut-key">S</span>
+                                <span class="shortcut-desc">Save CSV Changes</span>
+                            </div>
+                            <div class="shortcut-row">
+                                <span class="shortcut-key">Del</span> <span class="shortcut-sep">/</span> <span class="shortcut-key">Backspace</span>
+                                <span class="shortcut-desc">Delete Selected Box</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </aside>
+
+            <!-- Bounding Box Editing Viewport -->
+            <div class="viewport-container">
+                <!-- Info Overlay (Visible when no video loaded) -->
+                <div id="no-video-overlay" class="no-video-overlay">
+                    <svg class="overlay-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 9H3V5h9v7zm9 7H3v-5h18v5zm0-7h-7V5h7v7z"/>
+                    </svg>
+                    <h3>No Workspace Loaded</h3>
+                    <p>Select a video and tracks CSV in the sidebar to start editing annotations manually.</p>
+                </div>
+                
+                <!-- Bounding Box Canvas -->
+                <div class="canvas-wrapper">
+                    <canvas id="annotation-canvas"></canvas>
+                </div>
+            </div>
+        </main>
+
+        <!-- Bottom Controls Bar -->
+        <footer class="app-controls">
+            <!-- Frame Timeline Scrubber -->
+            <div class="timeline-row">
+                <span class="frame-indicator">Frame: <strong id="current-frame-text">0</strong></span>
+                <input type="range" id="frame-range" min="0" max="0" value="0" class="timeline-scrubber">
+                <span class="total-frames-indicator">Total: <strong id="total-frames-text">0</strong></span>
+            </div>
+
+            <!-- Playback and Action Buttons -->
+            <div class="controls-action-row">
+                <!-- Playback Control Buttons -->
+                <div class="playback-btn-group">
+                    <!-- First Frame -->
+                    <button id="btn-first" class="control-btn" title="First Frame">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6L18 18V6z"/></svg>
+                    </button>
+                    <!-- Rewind 10 -->
+                    <button id="btn-prev10" class="control-btn" title="Rewind 10 Frames">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/></svg>
+                    </button>
+                    <!-- Prev Frame -->
+                    <button id="btn-prev" class="control-btn" title="Previous Frame">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                    </button>
+                    <!-- Play / Pause -->
+                    <button id="btn-play" class="control-btn play-btn" title="Play / Pause">
+                        <!-- Play Icon -->
+                        <svg id="play-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        <!-- Pause Icon (hidden by default) -->
+                        <svg id="pause-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor" class="hidden"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    </button>
+                    <!-- Next Frame -->
+                    <button id="btn-next" class="control-btn" title="Next Frame">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+                    </button>
+                    <!-- Forward 10 -->
+                    <button id="btn-next10" class="control-btn" title="Forward 10 Frames">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/></svg>
+                    </button>
+                    <!-- Last Frame -->
+                    <button id="btn-last" class="control-btn" title="Last Frame">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M16 18h2V6h-2zM6 18l8.5-6L6 6z"/></svg>
+                    </button>
+                </div>
+
+                <!-- Clone Previous Frame -->
+                <button id="btn-clone-prev" class="btn btn-orange">
+                    <svg class="btn-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    Clone Previous Frame [V]
+                </button>
+
+                <!-- Input Actions (Jump, Speed, FPS) -->
+                <div class="input-param-row">
+                    <div class="input-param-group">
+                        <label for="jump-frame-input">Jump to</label>
+                        <input type="number" id="jump-frame-input" placeholder="Frame" min="0">
+                    </div>
+                    <div class="input-param-group">
+                        <label for="speed-select">Speed</label>
+                        <select id="speed-select">
+                            <option value="0.25">0.25x</option>
+                            <option value="0.5">0.5x</option>
+                            <option value="1.0" selected>1.0x</option>
+                            <option value="2.0">2.0x</option>
+                            <option value="4.0">4.0x</option>
+                        </select>
+                    </div>
+                    <div class="input-param-group">
+                        <label for="fps-input">FPS</label>
+                        <input type="number" id="fps-input" value="30" min="1" max="120">
+                    </div>
+                </div>
+
+                <!-- Save Changes -->
+                <button id="btn-save" class="btn btn-success" disabled>
+                    <svg class="btn-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+                    Save CSV Changes [S]
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- App Script -->
+    <script src="app.js"></script>
+</body>
+</html>
