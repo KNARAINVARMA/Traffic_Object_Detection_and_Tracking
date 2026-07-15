@@ -113,10 +113,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Model weights file (defaults: rtdetr-l.pt for sahi_rtdetr, yolov8m.pt for yolov8).",
     )
     det.add_argument("--imgsz",  type=int,   default=1280, help="YOLO input image size.")
-    det.add_argument("--conf",   type=float, default=0.25, help="Detection confidence threshold.")
+    det.add_argument("--conf",   type=float, default=0.10, help="Detection confidence threshold.")
     det.add_argument("--iou",    type=float, default=0.50, help="NMS IoU threshold.")
     det.add_argument(
-        "--tile-grid", default="2x2",
+        "--tile-grid", default="3x3",
         help="Tiling grid as ROWSxCOLS (e.g. '2x2' or '3x3') for YOLOv8. Use '1x1' to disable tiling.",
     )
     det.add_argument("--tile-overlap", type=float, default=0.20,
@@ -127,9 +127,9 @@ def build_parser() -> argparse.ArgumentParser:
                      help="SAHI slice height.")
     det.add_argument("--slice-width", type=int, default=512,
                      help="SAHI slice width.")
-    det.add_argument("--overlap-height-ratio", type=float, default=0.30,
+    det.add_argument("--overlap-height-ratio", type=float, default=0.40,
                      help="SAHI slice overlap height ratio.")
-    det.add_argument("--overlap-width-ratio", type=float, default=0.30,
+    det.add_argument("--overlap-width-ratio", type=float, default=0.40,
                      help="SAHI slice overlap width ratio.")
     det.add_argument("--device", default=None,
                      help="Inference device: 'cuda', 'cpu', 'mps', or '0' for GPU index.")
@@ -154,9 +154,9 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Max pixel width for a car before it gets relabeled as a motorcycle.")
     vpost.add_argument("--car-max-motorcycle-height", type=float, default=40.0,
                        help="Max pixel height for a car before it gets relabeled as a motorcycle.")
-    vpost.add_argument("--person-conf-thresh", type=float, default=0.25,
+    vpost.add_argument("--person-conf-thresh", type=float, default=0.15,
                        help="Confidence threshold for person detections.")
-    vpost.add_argument("--motorcycle-conf-thresh", type=float, default=0.15,
+    vpost.add_argument("--motorcycle-conf-thresh", type=float, default=0.10,
                        help="Confidence threshold for motorcycle detections.")
     vpost.add_argument("--debug-trucks", action="store_true",
                        help="Enable saving cropped truck detections for manual debugging.")
@@ -170,14 +170,16 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Minimum score for Stage-2 (occlusion recovery) matching.")
     trk.add_argument("--match-thresh", type=float, default=0.80,
                      help="Max IoU-distance to accept a Stage-1 match (0.8 → IoU ≥ 0.2).")
-    trk.add_argument("--track-buffer", type=int,   default=30,
-                     help="Frames a Lost track is kept before deletion (30 @ 25 fps = 1.2 s).")
-    trk.add_argument("--motorcycle-track-buffer", type=int, default=60,
+    trk.add_argument("--track-buffer", type=int,   default=60,
+                     help="Frames a Lost track is kept before deletion (60 @ 25 fps = 2.4 s).")
+    trk.add_argument("--motorcycle-track-buffer", type=int, default=120,
                      help="Frames a Lost motorcycle track is kept before deletion.")
     trk.add_argument("--motorcycle-match-thresh", type=float, default=0.70,
                      help="Max distance threshold to accept a Stage-1 motorcycle match.")
     trk.add_argument("--min-hits",     type=int,   default=3,
                      help="Consecutive frames before a new track appears in output.")
+    trk.add_argument("--class-aware", action=argparse.BooleanOptionalAction, default=True,
+                     help="Enable class-aware tracking to prevent cross-class ID stealing.")
 
     # ---- Smoothing ----------------------------------------------------------
     smo = p.add_argument_group("Smoothing")
@@ -330,6 +332,7 @@ def run(args: argparse.Namespace) -> dict:
         match_thresh = args.match_thresh,
         track_buffer = args.track_buffer,
         min_hits     = args.min_hits,
+        class_aware  = args.class_aware,
         motorcycle_track_buffer = args.motorcycle_track_buffer,
         motorcycle_match_thresh = args.motorcycle_match_thresh,
         device       = args.device,

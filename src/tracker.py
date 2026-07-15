@@ -764,7 +764,7 @@ class BYTETracker:
 
             for t in self.lost_stracks:
                 curr_gap = self.frame_id - t.frame_id
-                if not (2 <= curr_gap <= 30):
+                if not (2 <= curr_gap <= self.track_buffer):
                     continue
 
                 # Class penalty
@@ -970,7 +970,7 @@ class BYTETracker:
 
     def _repair_nascent_id_switches(self,
                                      nascent_window: int = 5,
-                                     max_recent_loss: int = 3) -> None:
+                                     max_recent_loss: int = 15) -> None:
         """
         Detect and repair ID switches that happen in the first few frames of a
         new track (nascent_window) caused by brief 1-3 frame detection jitter.

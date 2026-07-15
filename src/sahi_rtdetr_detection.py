@@ -64,7 +64,7 @@ class SahiRTDetrDetector:
         slice_width: int = 512,
         overlap_height_ratio: float = 0.30,
         overlap_width_ratio: float = 0.30,
-        conf: float = 0.15,
+        conf: float = 0.10,
         device: Optional[str] = None,
     ) -> None:
         self.slice_height = slice_height
