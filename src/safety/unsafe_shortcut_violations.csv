@@ -1,10 +1,2 @@
 track_id,class_name,entry_direction,exit_direction,violation_start_frame,violation_type,reason
-68,person,NORTH,WEST,1,Unsafe Roundabout Shortcut,NORTH to WEST shortcut without roundabout traversal during congestion
-112,person,SOUTH,EAST,23,Unsafe Roundabout Shortcut,SOUTH to EAST shortcut without roundabout traversal during congestion
-193,car,NORTH,WEST,216,Unsafe Roundabout Shortcut,NORTH to WEST shortcut without roundabout traversal during congestion
-203,motorcycle,NORTH,WEST,242,Unsafe Roundabout Shortcut,NORTH to WEST shortcut without roundabout traversal during congestion
-226,person,NORTH,WEST,298,Unsafe Roundabout Shortcut,NORTH to WEST shortcut without roundabout traversal during congestion
-260,motorcycle,NORTH,WEST,421,Unsafe Roundabout Shortcut,NORTH to WEST shortcut without roundabout traversal during congestion
-278,person,NORTH,WEST,512,Unsafe Roundabout Shortcut,NORTH to WEST shortcut without roundabout traversal during congestion
-283,motorcycle,NORTH,WEST,519,Unsafe Roundabout Shortcut,NORTH to WEST shortcut without roundabout traversal during congestion
-295,person,SOUTH,EAST,568,Unsafe Roundabout Shortcut,SOUTH to EAST shortcut without roundabout traversal during congestion
+293,motorcycle,NORTH,WEST,563,Unsafe Roundabout Shortcut,NORTH to WEST shortcut without roundabout traversal during congestion

@@ -4,15 +4,10 @@ import numpy as np
 df = pd.read_csv('shortcut_analysis.csv')
 original_df = pd.read_csv(r'D:\btp\narain_data\test1.csv')
 
-# Determine scale factor dynamically from the dataset
-non_zero = original_df[original_df["center_x"] > 0]
-if not non_zero.empty:
-    scale = non_zero.iloc[0]["world_x"] / non_zero.iloc[0]["center_x"]
-else:
-    scale = 0.0875  # default lane-based scale: 7.0 / 80.0
-
-X_C = 870.0 * scale
-Y_C = 570.0 * scale
+try:
+    from .calibration import CENTER_X as X_C, CENTER_Y as Y_C
+except ImportError:
+    from calibration import CENTER_X as X_C, CENTER_Y as Y_C
 
 results = []
 for tid in df['track_id'].values:

@@ -5,16 +5,13 @@ import numpy as np
 csv_path = r'D:\btp\narain_data\test1.csv'
 df = pd.read_csv(csv_path)
 
-# Determine the scale factor dynamically from the data
-non_zero = df[df['center_x'] > 0]
-if not non_zero.empty:
-    scale = non_zero.iloc[0]['world_x'] / non_zero.iloc[0]['center_x']
-else:
-    scale = 0.0875  # default lane-based scale: 7.0 / 80.0
+try:
+    from .calibration import CENTER_X, CENTER_Y, R_INNER, R_OUTER, R_SEPARATOR
+except ImportError:
+    from calibration import CENTER_X, CENTER_Y, R_INNER, R_OUTER, R_SEPARATOR
 
-# Parameters (originally: X_c = 870 * 0.05 = 43.5, Y_c = 570 * 0.05 = 28.5)
-X_c = 870.0 * scale
-Y_c = 570.0 * scale
+X_c = CENTER_X
+Y_c = CENTER_Y
 fps = 30
 dt = 1/30
 
@@ -22,16 +19,10 @@ dt = 1/30
 df['r'] = np.sqrt((df['world_x'] - X_c)**2 + (df['world_y'] - Y_c)**2)
 df['theta'] = np.arctan2(df['world_y'] - Y_c, df['world_x'] - X_c)
 
-# Recalculate radial boundaries based on scale
-# Originally: inner=120px * scale, boundary=200px * scale, outer=280px * scale
-r_inner = 120.0 * scale
-r_boundary = 200.0 * scale
-r_outer = 280.0 * scale
-
 def assign_lane(r):
-    if r_inner <= r < r_boundary:
+    if R_INNER <= r < R_SEPARATOR:
         return 'Inner'
-    elif r_boundary <= r <= r_outer:
+    elif R_SEPARATOR <= r <= R_OUTER:
         return 'Outer'
     else:
         return 'None'
@@ -45,7 +36,7 @@ ring_df = df[df['lane'] != 'None'].copy()
 unique_ring_tracks = ring_df['track_id'].nunique()
 
 # Step 2: Detect Part A - Lane Straddling Violation
-ring_df['is_straddling'] = (np.abs(ring_df['r'] - r_boundary) <= 0.5)
+ring_df['is_straddling'] = (np.abs(ring_df['r'] - R_SEPARATOR) <= 0.5)
 
 straddling_violations = []
 for track_id, group in ring_df.groupby('track_id'):

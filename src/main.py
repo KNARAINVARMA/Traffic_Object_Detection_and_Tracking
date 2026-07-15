@@ -350,12 +350,13 @@ def run(args: argparse.Namespace) -> dict:
             pixel_length_px = args.car_pixel_length,
         )
     else:
+        from safety.calibration import SCALE as DEFAULT_SCALE, LANE_WIDTH_M, LANE_WIDTH_PX
         logger.warning(
-            "No pixel-to-metre calibration provided. "
-            "Using default lane-based scale of 0.0875 m/px (7.0 m / 80 px). "
-            "Pass --lane-width-px for custom lane pixel measurement."
+            f"No pixel-to-metre calibration provided. "
+            f"Using default lane-based scale of {DEFAULT_SCALE:.6f} m/px ({LANE_WIDTH_M} m / {LANE_WIDTH_PX} px). "
+            f"Pass --lane-width-px for custom lane pixel measurement."
         )
-        mapper = CoordinateMapper.from_scale_factor(0.0875)
+        mapper = CoordinateMapper.from_scale_factor(DEFAULT_SCALE)
 
     # ---- Statistics counters ------------------------------------------------
     total_detections  = 0

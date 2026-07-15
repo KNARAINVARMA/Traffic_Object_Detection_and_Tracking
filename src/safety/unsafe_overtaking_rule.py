@@ -6,9 +6,10 @@ from typing import Dict, List, Optional, Tuple, Union
 import pandas as pd
 import numpy as np
 
-X_C = 43.5
-Y_C = 28.5
-R_OUTER = 14.0
+try:
+    from .calibration import CENTER_X as X_C, CENTER_Y as Y_C, R_OUTER
+except ImportError:
+    from calibration import CENTER_X as X_C, CENTER_Y as Y_C, R_OUTER
 MIN_DIRECTION_ANGLE_DEG = 30.0
 BEHIND_AHEAD_THRESHOLD = 0.5
 OVERTAKE_PERSISTENCE_FRAMES = 3
@@ -62,18 +63,8 @@ def _load_data(csv_file: str) -> pd.DataFrame:
         raise ValueError(f"Missing required columns in CSV: {sorted(missing)}")
     df = df.copy()
 
-    # Determine scale factor dynamically from the dataset
-    non_zero = df[df["center_x"] > 0]
-    if not non_zero.empty:
-        scale = non_zero.iloc[0]["world_x"] / non_zero.iloc[0]["center_x"]
-    else:
-        scale = 0.0875  # default lane-based scale: 7.0 / 80.0
-
-    x_c = 870.0 * scale
-    y_c = 570.0 * scale
-
-    df["dx"] = df["world_x"] - x_c
-    df["dy"] = df["world_y"] - y_c
+    df["dx"] = df["world_x"] - X_C
+    df["dy"] = df["world_y"] - Y_C
     df["r"] = np.sqrt(df["dx"] ** 2 + df["dy"] ** 2)
     return df
 
@@ -129,14 +120,6 @@ def detect_unsafe_overtaking(csv_file: str, output_csv_path: Union[str, Path, No
                 track_rows = track.set_index("frame")
                 other_rows = other.set_index("frame")
 
-                # Determine scale factor dynamically from the dataset
-                non_zero = df[df["center_x"] > 0]
-                if not non_zero.empty:
-                    scale = non_zero.iloc[0]["world_x"] / non_zero.iloc[0]["center_x"]
-                else:
-                    scale = 0.0875  # default lane-based scale: 7.0 / 80.0
-                r_outer = 280.0 * scale
-
                 sequence = []
                 for frame_id in overlap_frames:
                     row_a = track_rows.loc[frame_id]
@@ -145,7 +128,7 @@ def detect_unsafe_overtaking(csv_file: str, output_csv_path: Union[str, Path, No
                            float(row_a["world_y"]) - float(row_b["world_y"]))
                     forward = _dot(rel, rel_dir)
                     lateral = _cross(rel_dir, rel)
-                    r_zone = float(row_a["r"]) < r_outer and float(row_b["r"]) < r_outer
+                    r_zone = float(row_a["r"]) < R_OUTER and float(row_b["r"]) < R_OUTER
                     sequence.append({
                         "frame": int(frame_id),
                         "forward": forward,
