@@ -1,0 +1,14 @@
+frame,v1_id,v1_class,v2_id,v2_class,conflict_world_x,conflict_world_y,conflict_px_x,conflict_px_y,aggressor_id,passive_id,angular_says,ttc_says,methods_agree,ttc1_sec,ttc2_sec
+245,44,motorcycle,204,motorcycle,43.925,25.2511,878.5,505.0,44,204,uncertain,v1,True,5.638,5.813
+245,151,motorcycle,204,motorcycle,43.5327,24.7847,870.7,495.7,204,151,uncertain,v2,True,5.97,5.427
+363,214,motorcycle,237,motorcycle,42.2262,32.8989,844.5,658.0,214,237,uncertain,v1,True,6.687,6.974
+379,124,motorcycle,237,motorcycle,41.31,32.3238,826.2,646.5,237,124,uncertain,v2,True,6.982,6.874
+437,124,motorcycle,247,motorcycle,42.7754,33.0273,855.5,660.5,124,247,uncertain,v1,True,4.586,5.577
+525,250,motorcycle,260,motorcycle,37.3028,23.6654,746.1,473.3,250,260,uncertain,v1,True,0.36,1.336
+578,7,car,282,motorcycle,29.5086,26.6285,590.2,532.6,282,7,uncertain,v2,True,6.112,5.983
+620,124,motorcycle,283,motorcycle,35.6085,26.2146,712.2,524.3,283,124,uncertain,v2,True,5.836,5.562
+669,308,motorcycle,320,motorcycle,34.9381,21.019,698.8,420.4,308,320,uncertain,v1,True,5.866,6.848
+678,124,motorcycle,320,motorcycle,34.8621,20.5795,697.2,411.6,320,124,uncertain,v2,True,6.979,6.562
+703,283,motorcycle,325,car,34.0446,27.7487,680.9,555.0,283,325,uncertain,v1,True,5.831,6.759
+792,282,motorcycle,323,motorcycle,44.3273,25.6552,886.5,513.1,323,282,uncertain,v2,True,6.92,6.722
+795,232,motorcycle,337,motorcycle,33.2497,27.236,665.0,544.7,337,232,uncertain,v2,True,5.943,4.984

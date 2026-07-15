@@ -9,12 +9,12 @@ def detect_wrong_way_violations(csv_file):
         print(f"Error: The file '{csv_file}' was not found.")
         return
 
-    # Constants
-    X_c = 43.5
-    Y_c = 28.5
+    try:
+        from .calibration import CENTER_X as X_c, CENTER_Y as Y_c, R_INNER as R_MIN, R_OUTER as R_MAX
+    except ImportError:
+        from calibration import CENTER_X as X_c, CENTER_Y as Y_c, R_INNER as R_MIN, R_OUTER as R_MAX
+
     FPS = 30.0
-    R_MIN = 6.0
-    R_MAX = 14.0
     OMEGA_THRESHOLD = -0.1
     CONSECUTIVE_FRAMES_THRESHOLD = 15
 
@@ -91,5 +91,5 @@ def detect_wrong_way_violations(csv_file):
 
 if __name__ == "__main__":
     # The default execution processes the dataset specified
-    dataset_file = r"D:\btp\Traffic_Object_Detection_and_Tracking\outputs\csv\full1_tracks.csv"
+    dataset_file = r"D:\btp\narain_data\test1.csv"
     detect_wrong_way_violations(dataset_file)

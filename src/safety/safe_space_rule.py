@@ -25,11 +25,21 @@ if csv_path is None:
             if os.path.exists(possible_path):
                 csv_path = possible_path
 
+# If path still doesn't exist, fallback to D:\btp\narain_data\test1.csv
+if not csv_path or not os.path.exists(csv_path):
+    possible_fallback = r'D:\btp\narain_data\test1.csv'
+    if os.path.exists(possible_fallback):
+        csv_path = possible_fallback
+
 df = pd.read_csv(csv_path)
 
-# Parameters
-X_c = 43.5
-Y_c = 28.5
+try:
+    from .calibration import CENTER_X, CENTER_Y, R_INNER, R_OUTER, R_SEPARATOR
+except ImportError:
+    from calibration import CENTER_X, CENTER_Y, R_INNER, R_OUTER, R_SEPARATOR
+
+X_c = CENTER_X
+Y_c = CENTER_Y
 fps = 30
 dt = 1/30
 
@@ -38,9 +48,9 @@ df['r'] = np.sqrt((df['world_x'] - X_c)**2 + (df['world_y'] - Y_c)**2)
 df['theta'] = np.arctan2(df['world_y'] - Y_c, df['world_x'] - X_c)
 
 def assign_lane(r):
-    if 6.0 <= r < 10.0:
+    if R_INNER <= r < R_SEPARATOR:
         return 'Inner'
-    elif 10.0 <= r <= 14.0:
+    elif R_SEPARATOR <= r <= R_OUTER:
         return 'Outer'
     else:
         return 'None'
@@ -54,7 +64,7 @@ ring_df = df[df['lane'] != 'None'].copy()
 unique_ring_tracks = ring_df['track_id'].nunique()
 
 # Step 2: Detect Part A - Lane Straddling Violation
-ring_df['is_straddling'] = (np.abs(ring_df['r'] - 10.0) <= 0.5)
+ring_df['is_straddling'] = (np.abs(ring_df['r'] - R_SEPARATOR) <= 0.5)
 
 straddling_violations = []
 for track_id, group in ring_df.groupby('track_id'):
@@ -83,7 +93,6 @@ tailgating_records = []
 for (frame, lane), group in ring_df.groupby(['frame', 'lane']):
     if len(group) < 2:
         continue
-    
     # Sort by theta
     sorted_group = group.sort_values('theta').to_dict('records')
     n = len(sorted_group)

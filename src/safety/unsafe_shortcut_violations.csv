@@ -1,0 +1,2 @@
+track_id,class_name,entry_direction,exit_direction,violation_start_frame,violation_type,reason
+293,motorcycle,NORTH,WEST,563,Unsafe Roundabout Shortcut,NORTH to WEST shortcut without roundabout traversal during congestion

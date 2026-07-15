@@ -1,0 +1,33 @@
+# Traffic Safety Rules Documentation
+
+This directory contains comprehensive, detailed documentation for all traffic safety violation detection rules implemented in the project. Each rule includes physical context, mathematical formulation, parameter settings, and detailed explanations of the key Python code snippets.
+
+## Implemented Safety Rules
+
+### 1. [Wrong-Way Driving Detection Rule](file:///d:/btp/Traffic_Object_Detection_and_Tracking/docs/safety_rules/wrong_way_rule.md)
+* **Goal**: Detect vehicles traveling in the wrong direction (counter-clockwise) within the circulatory ring of the roundabout.
+* **Key Math**: Polar coordinate transformation, shortest-angular path displacement, and temporal noise filtering.
+
+### 2. [Safe Space & Lane Straddling Rules](file:///d:/btp/Traffic_Object_Detection_and_Tracking/docs/safety_rules/safe_space_rule.md)
+* **Goal**: 
+  * **Lane Straddling**: Flag vehicles driving directly on the boundary between lanes for extended durations.
+  * **Tailgating (Proximity Violation)**: Detect vehicles following too closely behind leading vehicles inside the same lane.
+* **Key Math**: Radial classification, relative polar-angle ordering, and arc-length calculation ($d = R_{\text{avg}} \times \Delta\theta$).
+
+### 3. [Unsafe Overtaking Detection Rule](file:///d:/btp/Traffic_Object_Detection_and_Tracking/docs/safety_rules/unsafe_overtaking_rule.md)
+* **Goal**: Identify vehicles executing high-risk overtaking maneuvers within the restricted roundabout zone.
+* **Key Math**: Heading vector alignment, spatial projections (forward dot product and lateral cross product), distance convergence/divergence checks, and lateral offset analysis.
+
+### 4. [Unsafe Roundabout Shortcut Rule](file:///d:/btp/Traffic_Object_Detection_and_Tracking/docs/safety_rules/unsafe_roundabout_shortcut_rule.md)
+* **Goal**: Detect vehicles cutting across corners at the intersection instead of traveling properly around the central island.
+* **Key Math**: Compass-based entry/exit verification, phase-unwrapped angular displacement ($\Delta\theta_{\text{unwrapped}}$), and intersection-level congestion mapping.
+
+---
+
+## Constants Reference
+Below is the common spatial frame of reference used across all safety rules:
+
+* **Roundabout Center ($X_C, Y_C$)**: $(43.5, 28.5)$
+* **Inner Island Radius ($R_{\text{INNER}}$)**: $6.0$ meters
+* **Outer Circulatory Boundary ($R_{\text{OUTER}}$)**: $14.0$ meters
+* **Video FPS**: $30.0$ frames per second (time step $\Delta t = 1/30$ seconds)

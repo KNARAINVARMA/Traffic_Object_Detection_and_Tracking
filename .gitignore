@@ -61,3 +61,7 @@ outputs_v2/
 .DS_Store
 Thumbs.db
 *.mp4
+
+# Rule and analysis CSV outputs
+rule.csv
+src/safety/shortcut_analysis.csv
