@@ -9,12 +9,19 @@ def detect_wrong_way_violations(csv_file):
         print(f"Error: The file '{csv_file}' was not found.")
         return
 
-    # Constants
-    X_c = 43.5
-    Y_c = 28.5
+    # Determine scale factor dynamically from the dataset
+    non_zero = df[df["center_x"] > 0]
+    if not non_zero.empty:
+        scale = non_zero.iloc[0]["world_x"] / non_zero.iloc[0]["center_x"]
+    else:
+        scale = 0.0875  # default lane-based scale: 7.0 / 80.0
+
+    # Constants (originally: X_c = 870 * 0.05 = 43.5, Y_c = 570 * 0.05 = 28.5, R_MIN = 120 * 0.05 = 6.0, R_MAX = 280 * 0.05 = 14.0)
+    X_c = 870.0 * scale
+    Y_c = 570.0 * scale
     FPS = 30.0
-    R_MIN = 6.0
-    R_MAX = 14.0
+    R_MIN = 120.0 * scale
+    R_MAX = 280.0 * scale
     OMEGA_THRESHOLD = -0.1
     CONSECUTIVE_FRAMES_THRESHOLD = 15
 

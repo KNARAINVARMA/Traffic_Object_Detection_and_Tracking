@@ -21,12 +21,23 @@ def plot_unsafe_overtaking(tracks_csv_path: str, violations_csv_path: str, outpu
 
     print(f"[reporter] Loading tracks from: {tracks_csv_path}")
     tracks_df = pd.read_csv(tracks_csv_path)
+
+    # Determine scale factor dynamically from the dataset
+    non_zero = tracks_df[tracks_df["center_x"] > 0]
+    if not non_zero.empty:
+        scale = non_zero.iloc[0]["world_x"] / non_zero.iloc[0]["center_x"]
+    else:
+        scale = 0.0875  # default lane-based scale: 7.0 / 80.0
+
+    x_c = 870.0 * scale
+    y_c = 570.0 * scale
+    r_outer = 280.0 * scale
     
     fig, ax = plt.subplots(figsize=(10, 10))
     
     # Plot roundabout center and boundary
-    ax.plot(X_C, Y_C, 'k+', markersize=15, label='Roundabout Center')
-    roundabout = patches.Circle((X_C, Y_C), R_OUTER, fill=False, color='black', linestyle='--', linewidth=2, label='Roundabout Boundary')
+    ax.plot(x_c, y_c, 'k+', markersize=15, label='Roundabout Center')
+    roundabout = patches.Circle((x_c, y_c), r_outer, fill=False, color='black', linestyle='--', linewidth=2, label='Roundabout Boundary')
     ax.add_patch(roundabout)
     
     colors = plt.cm.tab10.colors

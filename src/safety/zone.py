@@ -10,7 +10,7 @@ INTERSECTION_ZONE_PX: List[Tuple[float, float]] = [
     (0,    1080),  # bottom-left
 ]
 
-SCALE_MPX: float = 0.05  # metres per pixel (from Stage 2 pipeline)
+SCALE_MPX: float = 0.0875  # metres per pixel (from Stage 2 pipeline)
 
 
 def point_in_polygon(px: float, py: float, polygon: List[Tuple[float, float]]) -> bool:

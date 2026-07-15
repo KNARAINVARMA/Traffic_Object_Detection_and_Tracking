@@ -25,8 +25,19 @@ def determine_direction(dx: float, dy: float) -> str:
 
 def analyze_trajectories(csv_file: str):
     df = pd.read_csv(csv_file)
-    df["dx"] = df["world_x"] - X_C
-    df["dy"] = df["world_y"] - Y_C
+    
+    # Determine scale factor dynamically from the dataset
+    non_zero = df[df["center_x"] > 0]
+    if not non_zero.empty:
+        scale = non_zero.iloc[0]["world_x"] / non_zero.iloc[0]["center_x"]
+    else:
+        scale = 0.0875  # default lane-based scale: 7.0 / 80.0
+
+    x_c = 870.0 * scale
+    y_c = 570.0 * scale
+
+    df["dx"] = df["world_x"] - x_c
+    df["dy"] = df["world_y"] - y_c
     df["r"] = np.sqrt(df["dx"] ** 2 + df["dy"] ** 2)
 
     results = []
@@ -76,8 +87,8 @@ def analyze_trajectories(csv_file: str):
         plt.scatter(subset["angular_change"], subset["r_min"], label=movement, alpha=0.6)
         
     plt.axvline(x=35, color='r', linestyle='--', label='Original 35 deg threshold')
-    plt.axhline(y=14, color='b', linestyle='--', label='R_OUTER (14m)')
-    plt.axhline(y=6, color='g', linestyle='--', label='R_INNER (6m)')
+    plt.axhline(y=280.0 * scale, color='b', linestyle='--', label=f'R_OUTER ({280.0 * scale:.1f}m)')
+    plt.axhline(y=120.0 * scale, color='g', linestyle='--', label=f'R_INNER ({120.0 * scale:.1f}m)')
     
     plt.xlabel("Total Angular Change (degrees)")
     plt.ylabel("Minimum Radius (r_min) in meters")

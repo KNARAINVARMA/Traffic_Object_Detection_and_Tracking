@@ -55,9 +55,22 @@ def detect_unsafe_roundabout_shortcuts(csv_file: str, output_csv_path: str | Pat
     output_csv_path = Path(output_csv_path)
     output_csv_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Determine scale factor dynamically from the dataset
+    non_zero = df[df["center_x"] > 0]
+    if not non_zero.empty:
+        scale = non_zero.iloc[0]["world_x"] / non_zero.iloc[0]["center_x"]
+    else:
+        scale = 0.0875  # default lane-based scale: 7.0 / 80.0
+
+    # Scale the original pixel values (870, 570, 120, 280) to the new world units
+    x_c = 870.0 * scale
+    y_c = 570.0 * scale
+    r_inner = 120.0 * scale
+    r_outer = 280.0 * scale
+
     df = df.copy()
-    df["dx"] = df["world_x"] - X_C
-    df["dy"] = df["world_y"] - Y_C
+    df["dx"] = df["world_x"] - x_c
+    df["dy"] = df["world_y"] - y_c
     df["r"] = np.sqrt(df["dx"] ** 2 + df["dy"] ** 2)
 
     frame_groups = {frame: group for frame, group in df.groupby("frame")}
@@ -81,7 +94,7 @@ def detect_unsafe_roundabout_shortcuts(csv_file: str, output_csv_path: str | Pat
 
         # Radial band check: must enter the roundabout approach zone
         r_min = track["r"].min()
-        if r_min >= R_OUTER:
+        if r_min >= r_outer:
             continue
 
         # Angular traversal check
@@ -109,7 +122,7 @@ def detect_unsafe_roundabout_shortcuts(csv_file: str, output_csv_path: str | Pat
         for _, row in track.iterrows():
             same_frame = frame_groups[row["frame"]]
             other_vehicles = same_frame[same_frame["track_id"] != track_id]
-            other_in_outer = (other_vehicles["r"] < R_OUTER).sum()
+            other_in_outer = (other_vehicles["r"] < r_outer).sum()
             if other_in_outer >= CONGESTION_THRESHOLD:
                 conflict_frames.append(int(row["frame"]))
 

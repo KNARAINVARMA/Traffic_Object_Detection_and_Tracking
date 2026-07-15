@@ -184,16 +184,18 @@ def build_parser() -> argparse.ArgumentParser:
     smo.add_argument("--smooth-window", type=int, default=7,
                      help="Moving-average window size (frames). Use 1 to disable.")
 
-    # ---- Coordinate mapping -------------------------------------------------
     cmap = p.add_argument_group("Pixel-to-Metre Mapping")
     cmap.add_argument("--scale-factor", type=float, default=None,
                       help="Direct metres-per-pixel scale factor. "
-                           "Overrides --car-real-length / --car-pixel-length.")
+                           "Overrides --car-real-length / --car-pixel-length / --lane-width-px.")
     cmap.add_argument("--car-real-length",  type=float, default=4.0,
                       help="Typical car length in metres (reference object).")
     cmap.add_argument("--car-pixel-length", type=float, default=None,
-                      help="Measured pixel length of a typical car in the video. "
-                           "If not provided, defaults to a 0.05 m/px scale factor.")
+                      help="Measured pixel length of a typical car in the video.")
+    cmap.add_argument("--lane-width-m", type=float, default=7.0,
+                      help="Physical lane width in metres (reference object).")
+    cmap.add_argument("--lane-width-px", type=float, default=None,
+                      help="Measured lane width in pixels in the video.")
 
     # ---- Visualisation ------------------------------------------------------
     vis = p.add_argument_group("Visualisation")
@@ -337,6 +339,11 @@ def run(args: argparse.Namespace) -> dict:
 
     if args.scale_factor:
         mapper = CoordinateMapper.from_scale_factor(args.scale_factor)
+    elif args.lane_width_px:
+        mapper = CoordinateMapper.from_reference_object(
+            real_length_m   = args.lane_width_m,
+            pixel_length_px = args.lane_width_px,
+        )
     elif args.car_pixel_length:
         mapper = CoordinateMapper.from_reference_object(
             real_length_m   = args.car_real_length,
@@ -345,10 +352,10 @@ def run(args: argparse.Namespace) -> dict:
     else:
         logger.warning(
             "No pixel-to-metre calibration provided. "
-            "Using default 0.05 m/px. Pass --car-pixel-length or --scale-factor "
-            "for accurate world coordinates."
+            "Using default lane-based scale of 0.0875 m/px (7.0 m / 80 px). "
+            "Pass --lane-width-px for custom lane pixel measurement."
         )
-        mapper = CoordinateMapper.from_scale_factor(0.05)
+        mapper = CoordinateMapper.from_scale_factor(0.0875)
 
     # ---- Statistics counters ------------------------------------------------
     total_detections  = 0
