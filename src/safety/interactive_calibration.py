@@ -9,26 +9,41 @@ points = []
 def click_callback(event, x, y, flags, param):
     global points
     if event == cv2.EVENT_LBUTTONDOWN:
+        scale_display = param.get('scale_display', 1.0)
         points.append((x, y))
-        print(f"Point {len(points)}: Pixel coordinates (X={x}, Y={y})")
+        
+        orig_x = x / scale_display
+        orig_y = y / scale_display
+        print(f"Point {len(points)}: Display(X={x}, Y={y}) -> Original(X={orig_x:.2f}, Y={orig_y:.2f})")
+        
         # Draw a circle on the clicked point
         cv2.circle(param['img'], (x, y), 5, (0, 0, 255), -1)
         if len(points) == 2:
             # Draw line between points
             cv2.line(param['img'], points[0], points[1], (0, 255, 0), 2)
             
-            # Compute Euclidean distance in pixels
+            # Compute Euclidean distance in display coordinates
             x1, y1 = points[0]
             x2, y2 = points[1]
-            dist_px = math.hypot(x2 - x1, y2 - y1)
-            print(f"\nMeasured Distance: {dist_px:.2f} pixels")
+            dist_display = math.hypot(x2 - x1, y2 - y1)
+            
+            # Compute Euclidean distance in original coordinates
+            orig_x1 = x1 / scale_display
+            orig_y1 = y1 / scale_display
+            orig_x2 = x2 / scale_display
+            orig_y2 = y2 / scale_display
+            dist_original = math.hypot(orig_x2 - orig_x1, orig_y2 - orig_y1)
+            
+            print(f"\nDisplay Distance  : {dist_display:.2f} px")
+            print(f"Original Distance : {dist_original:.2f} px")
+            print(f"Display Scale     : {scale_display:.6f}")
             
             # Compute scale factor for 7.0m lane width
             lane_width_m = 7.0
-            scale = lane_width_m / dist_px
+            scale = lane_width_m / dist_original
             print(f"Calculated Scale Factor: {scale:.6f} meters/pixel")
             print(f"\nSuggested command arguments:")
-            print(f"  --lane-width-px {dist_px:.2f} --lane-width-m 7.0")
+            print(f"  --lane-width-px {dist_original:.2f} --lane-width-m 7.0")
         cv2.imshow("Interactive Calibration Tool", param['img'])
 
 def main():
@@ -63,7 +78,10 @@ def main():
     
     img_display = frame_display.copy()
     cv2.namedWindow("Interactive Calibration Tool")
-    cv2.setMouseCallback("Interactive Calibration Tool", click_callback, {'img': img_display})
+    cv2.setMouseCallback("Interactive Calibration Tool", click_callback, {
+        'img': img_display,
+        'scale_display': scale_display
+    })
     
     while True:
         cv2.imshow("Interactive Calibration Tool", img_display)
@@ -73,7 +91,10 @@ def main():
         elif key == ord('r'):
             points.clear()
             img_display = frame_display.copy()
-            cv2.setMouseCallback("Interactive Calibration Tool", click_callback, {'img': img_display})
+            cv2.setMouseCallback("Interactive Calibration Tool", click_callback, {
+                'img': img_display,
+                'scale_display': scale_display
+            })
             print("\nReset points. Click again.")
             
     cv2.destroyAllWindows()
