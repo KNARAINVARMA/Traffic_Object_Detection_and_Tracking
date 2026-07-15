@@ -7,6 +7,7 @@ Y_C = 28.5
 R_INNER = 6.0
 R_OUTER = 14.0
 CONGESTION_THRESHOLD = 2
+MIN_FRAMES = 6
 
 STRAIGHT_MOVEMENTS = {
     ("NORTH", "SOUTH"),
@@ -30,7 +31,7 @@ TURNING_MOVEMENTS = {
 def determine_direction(dx: float, dy: float) -> str:
     if abs(dx) >= abs(dy):
         return "EAST" if dx > 0 else "WEST"
-    return "NORTH" if dy > 0 else "SOUTH"
+    return "SOUTH" if dy > 0 else "NORTH"
 
 
 def _is_turning(entry_direction: str, exit_direction: str) -> bool:
@@ -64,7 +65,7 @@ def detect_unsafe_roundabout_shortcuts(csv_file: str, output_csv_path: str | Pat
 
     for track_id, track in df.groupby("track_id"):
         track = track.sort_values("frame")
-        if len(track) < 2:
+        if len(track) < MIN_FRAMES:
             continue
 
         first = track.iloc[0]
@@ -72,13 +73,36 @@ def detect_unsafe_roundabout_shortcuts(csv_file: str, output_csv_path: str | Pat
         entry_direction = determine_direction(first["dx"], first["dy"])
         exit_direction = determine_direction(last["dx"], last["dy"])
 
-        if (entry_direction, exit_direction) in STRAIGHT_MOVEMENTS:
-            continue
-        if not _is_turning(entry_direction, exit_direction):
+        is_straight = (entry_direction, exit_direction) in STRAIGHT_MOVEMENTS
+        is_turning = _is_turning(entry_direction, exit_direction)
+
+        if not (is_straight or is_turning):
             continue
 
-        entered_roundabout = (track["r"] < R_INNER).any()
-        if entered_roundabout:
+        # Radial band check: must enter the roundabout approach zone
+        r_min = track["r"].min()
+        if r_min >= R_OUTER:
+            continue
+
+        # Angular traversal check
+        theta = np.arctan2(track["dy"], track["dx"])
+        theta_unwrapped = np.unwrap(theta)
+        total_angular_change = np.abs(theta_unwrapped[-1] - theta_unwrapped[0]) * 180.0 / np.pi
+
+        is_shortcut = False
+        
+        # Based on the specific intersection geometry and user-provided image,
+        # the ONLY physical shortcuts are wrong-way right turns that cut the corner
+        # (North to West, and South to East).
+        # Proper paths (clockwise around the island) have angular change ~270 degrees (> 150)
+        # Shortcut paths (cutting the corner) have angular change ~90 degrees (< 150)
+        shortcut_paths = {("NORTH", "WEST"), ("SOUTH", "EAST")}
+        
+        if (entry_direction, exit_direction) in shortcut_paths:
+            if total_angular_change < 150.0:
+                is_shortcut = True
+
+        if not is_shortcut:
             continue
 
         conflict_frames = []
@@ -121,10 +145,10 @@ def detect_unsafe_roundabout_shortcuts(csv_file: str, output_csv_path: str | Pat
         ],
     )
     output_df.to_csv(output_csv_path, index=False)
-    print(f"Saved {len(output_df)} unsafe roundabout shortcut violation(s) → {output_csv_path}")
+    print(f"Saved {len(output_df)} unsafe roundabout shortcut violation(s) -> {output_csv_path}")
     return output_csv_path
 
 
 if __name__ == "__main__":
-    default_tracks = Path(__file__).resolve().parent.parent / "outputs" / "csv" / "full1_tracks.csv"
+    default_tracks = r"D:\btp\narain_data\test1.csv"
     detect_unsafe_roundabout_shortcuts(default_tracks)

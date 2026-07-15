@@ -71,6 +71,10 @@ def main() -> None:
                         help="Annotate unsafe overtaking violations on the output video")
     parser.add_argument("--unsafe-overtaking-video-output", default=None,
                         help="Path to write unsafe overtaking annotated video")
+    parser.add_argument("--plot-unsafe-overtaking", action="store_true",
+                        help="Plot unsafe overtaking violations to a 2D image")
+    parser.add_argument("--unsafe-overtaking-plot-output", default=None,
+                        help="Path to write unsafe overtaking plot image")
     args = parser.parse_args()
 
     if args.preview_zone:
@@ -135,6 +139,14 @@ def main() -> None:
             print(f"[main] Annotating unsafe overtaking video → {overtaking_video_out}")
             annotate_overtaking_video(overtaking_out, tracks, args.video, overtaking_video_out)
 
+        if args.plot_unsafe_overtaking:
+            from .visualize_unsafe_overtaking_plot import plot_unsafe_overtaking
+            overtaking_plot_out = args.unsafe_overtaking_plot_output or os.path.join(
+                args.output_dir, f"{video_stem}_unsafe_overtaking_visualization.png"
+            )
+            print(f"[main] Plotting unsafe overtaking → {overtaking_plot_out}")
+            plot_unsafe_overtaking(args.csv, overtaking_out, overtaking_plot_out)
+
     print("\n[main] === Summary ===")
     print(f"  Total conflicts   : {len(results)}")
     print(f"  Methods agree     : {agreed}")
@@ -146,6 +158,8 @@ def main() -> None:
         print(f"  Unsafe overtaking: {overtaking_out}")
     if args.detect_unsafe_overtaking and args.annotate_unsafe_overtaking:
         print(f"  Unsafe overtaking video: {overtaking_video_out}")
+    if args.detect_unsafe_overtaking and args.plot_unsafe_overtaking:
+        print(f"  Unsafe overtaking plot: {overtaking_plot_out}")
 
 
 if __name__ == "__main__":

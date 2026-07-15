@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 # Load the dataset
-csv_path = r'C:\Users\sneha\Downloads\test1_slowed_tracks (1).csv'
+csv_path = r'D:\btp\narain_data\test1.csv'
 df = pd.read_csv(csv_path)
 
 # Parameters
