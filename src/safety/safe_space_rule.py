@@ -1,46 +1,32 @@
-import argparse
+import os
 import pandas as pd
 import numpy as np
-import os
 
-# Parse command line arguments
-parser = argparse.ArgumentParser(description="Evaluate Tailgating Safe Space Rule")
-parser.add_argument("--csv", type=str, default=None, help="Path to input tracks CSV")
-parser.add_argument("--output", type=str, default=os.path.join(os.path.dirname(__file__), 'csv_outputs', 'tailgating_violations.csv'), help="Path to output tailgating violations CSV")
-args, unknown = parser.parse_known_args()
+def _resolve(path_str: str) -> str:
+    if not path_str or os.path.exists(path_str):
+        return path_str
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.abspath(os.path.join(script_dir, "..", ".."))
+    cands = [
+        os.path.join(project_root, path_str),
+        os.path.join(project_root, "newsafety_rules", path_str),
+        os.path.join(project_root, "newsafety_rules", "data", os.path.basename(path_str)),
+        os.path.join(project_root, "data", os.path.basename(path_str)),
+        os.path.join(script_dir, "..", path_str),
+    ]
+    for c in cands:
+        if os.path.exists(c):
+            return os.path.abspath(c)
+    return path_str
 
-csv_path = args.csv
-output_path = args.output
+# Load the dataset
+csv_path = r'data\long1_tracks_narain_cleaned_edited.csv'
+resolved_csv = _resolve(csv_path)
+df = pd.read_csv(resolved_csv)
 
-if csv_path is None:
-    csv_path = r'D:\btp\narain_data\long1_tracks_narain_cleaned_edited.csv'
-    if not os.path.exists(csv_path):
-        # Try looking in the workspace relative to this file
-        possible_path = os.path.join(os.path.dirname(__file__), '..', 'outputs', 'csv', 'long1_tracks_narain_cleaned_edited.csv')
-        if os.path.exists(possible_path):
-            csv_path = possible_path
-        else:
-            # Try local path from project root
-            possible_path = os.path.join('src', 'outputs', 'csv', 'long1_tracks_narain_cleaned_edited.csv')
-            if os.path.exists(possible_path):
-                csv_path = possible_path
-
-# If path still doesn't exist, fallback to D:\btp\narain_data\long1_tracks_narain_cleaned_edited.csv
-if not csv_path or not os.path.exists(csv_path):
-    for possible_fallback in [r'D:\btp\narain_data\long1_tracks_narain_cleaned_edited.csv']:
-        if os.path.exists(possible_fallback):
-            csv_path = possible_fallback
-            break
-
-df = pd.read_csv(csv_path)
-
-try:
-    from .calibration import CENTER_X, CENTER_Y, R_INNER, R_OUTER, R_SEPARATOR
-except ImportError:
-    from calibration import CENTER_X, CENTER_Y, R_INNER, R_OUTER, R_SEPARATOR
-
-X_c = CENTER_X
-Y_c = CENTER_Y
+# Parameters
+X_c = 43.5
+Y_c = 28.5
 fps = 30
 dt = 1/30
 
@@ -49,9 +35,9 @@ df['r'] = np.sqrt((df['world_x'] - X_c)**2 + (df['world_y'] - Y_c)**2)
 df['theta'] = np.arctan2(df['world_y'] - Y_c, df['world_x'] - X_c)
 
 def assign_lane(r):
-    if R_INNER <= r < R_SEPARATOR:
+    if 6.0 <= r < 10.0:
         return 'Inner'
-    elif R_SEPARATOR <= r <= R_OUTER:
+    elif 10.0 <= r <= 14.0:
         return 'Outer'
     else:
         return 'None'
@@ -64,7 +50,7 @@ ring_df = df[df['lane'] != 'None'].copy()
 # 1. Total unique track IDs that entered the circulating ring
 unique_ring_tracks = ring_df['track_id'].nunique()
 
-# Step 2: Detect Tailgating / Proximity Violation
+# Step 2: Detect Part B - Tailgating / Proximity Violation
 tailgating_records = []
 
 # Group frame-by-frame, then by lane
@@ -99,6 +85,7 @@ print(f"1. Total unique track IDs that entered the circulating ring: {unique_rin
 
 print("\n2. Tailgating Violations by class_name:")
 if not tailgating_df.empty:
+    # We want unique track IDs flagged for tailgating
     unique_tailgating = tailgating_df.drop_duplicates('follower_track_id')
     print(unique_tailgating['class_name'].value_counts().to_string())
 else:
@@ -112,22 +99,15 @@ if not tailgating_df.empty:
 else:
     print("No tailgating violations found.")
 
-# Exporting violations to output_path
+# Export to rule.csv
 if not tailgating_df.empty:
     tailgating_export = tailgating_df.copy()
     tailgating_export['violation_type'] = 'Tailgating'
     tailgating_export = tailgating_export.rename(columns={'follower_track_id': 'track_id'})
-else:
-    tailgating_export = pd.DataFrame()
-
-combined_df = tailgating_export
-
-if not combined_df.empty:
     columns_order = ['violation_type', 'frame', 'track_id', 'leader_track_id', 'class_name', 'lane', 'd']
-    # Only keep columns that exist
-    columns_order = [c for c in columns_order if c in combined_df.columns]
-    combined_df = combined_df[columns_order]
+    combined_export = tailgating_export[columns_order]
+else:
+    combined_export = pd.DataFrame(columns=['violation_type', 'frame', 'track_id', 'leader_track_id', 'class_name', 'lane', 'd'])
 
-os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-combined_df.to_csv(output_path, index=False)
-print(f"\n4. Tailgating violations have been successfully saved to '{output_path}'.")
+combined_export.to_csv('rule.csv', index=False)
+print("\n4. All tailgating violations have been successfully saved to 'rule.csv'.")
