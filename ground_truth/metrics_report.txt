@@ -1,0 +1,98 @@
+================================================================================
+              GROUND TRUTH vs. PREDICTIONS (Raw Output) REPORT
+================================================================================
+
+[ UNIQUE VEHICLES COUNTED ]
+OVERALL : GT = 193 vehicles | PRED = 283 vehicles
+  - Car : GT = 64 | PRED = 68
+  - Person : GT = 48 | PRED = 109
+  - Motorcycle : GT = 80 | PRED = 128
+  - Truck : GT = 1 | PRED = 0
+
+[ TRACK QUALITY DISTRIBUTION ]
+  Mostly Tracked  (MT, >=80% coverage) : 84  tracks
+  Partially Tracked (PT, 20-80%)      : 44  tracks
+  Mostly Lost     (ML, <20% coverage) : 65  tracks
+  Total Track Fragmentations          : 181
+
+  Per-Class Breakdown:
+  Class           MT    PT    ML   Frags
+  --------------------------------------
+  Car             28    10    26      32
+  Motorcycle      24    19    37      79
+  Person          32    15     1      70
+  Truck            0     0     1       0
+
+[ TRACKING & DETECTION METRICS ]
+
+--- OVERALL ---
+  F1 Score                     : 0.7532
+  Precision                    : 0.8552
+  Recall                       : 0.6729
+  MOTA (Tracking Accuracy)     : 55.81%
+  MOTP (Bounding Box Quality)  : 95.02% avg IoU on matched boxes
+  IDF1 (ID Consistency)        : 73.27%
+  ID Switches                  : 40
+  Track Fragmentations         : 181
+  False Positives (FP)         : 5371
+  False Negatives (FN)         : 15420
+  True Positives  (TP)         : 31722
+  Total GT Boxes               : 47142
+
+--- CAR ---
+  F1 Score                     : 0.6193
+  Precision                    : 0.8483
+  Recall                       : 0.4877
+  MOTA (Tracking Accuracy)     : 40.02%
+  MOTP (Bounding Box Quality)  : 96.64% avg IoU on matched boxes
+  IDF1 (ID Consistency)        : 61.66%
+  ID Switches                  : 6
+  Track Fragmentations         : 32
+  False Positives (FP)         : 1517
+  False Negatives (FN)         : 8914
+  True Positives  (TP)         : 8486
+  Total GT Boxes               : 17400
+
+--- PERSON ---
+  F1 Score                     : 0.7975
+  Precision                    : 0.8093
+  Recall                       : 0.7861
+  MOTA (Tracking Accuracy)     : 60.04%
+  MOTP (Bounding Box Quality)  : 96.57% avg IoU on matched boxes
+  IDF1 (ID Consistency)        : 77.76%
+  ID Switches                  : 5
+  Track Fragmentations         : 70
+  False Positives (FP)         : 2296
+  False Negatives (FN)         : 2650
+  True Positives  (TP)         : 9741
+  Total GT Boxes               : 12391
+
+--- MOTORCYCLE ---
+  F1 Score                     : 0.4911
+  Precision                    : 0.5322
+  Recall                       : 0.4558
+  MOTA (Tracking Accuracy)     : 5.46%
+  MOTP (Bounding Box Quality)  : 93.70% avg IoU on matched boxes
+  IDF1 (ID Consistency)        : 47.67%
+  ID Switches                  : 10
+  Track Fragmentations         : 79
+  False Positives (FP)         : 6840
+  False Negatives (FN)         : 9291
+  True Positives  (TP)         : 7783
+  Total GT Boxes               : 17074
+
+--- TRUCK ---
+  F1 Score                     : 0.0000
+  Precision                    : 0.0000
+  Recall                       : 0.0000
+  MOTA (Tracking Accuracy)     : 0.00%
+  MOTP (Bounding Box Quality)  : nan% avg IoU on matched boxes
+  IDF1 (ID Consistency)        : 0.00%
+  ID Switches                  : 0
+  Track Fragmentations         : 0
+  False Positives (FP)         : 0
+  False Negatives (FN)         : 277
+  True Positives  (TP)         : 0
+  Total GT Boxes               : 277
+
+================================================================================

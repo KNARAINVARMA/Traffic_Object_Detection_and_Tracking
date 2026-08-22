@@ -1,0 +1,128 @@
+{
+  "unique_vehicles": {
+    "overall_gt": 193,
+    "overall_pred": 283,
+    "by_class": {
+      "car": {
+        "gt": 64,
+        "pred": 68
+      },
+      "person": {
+        "gt": 48,
+        "pred": 109
+      },
+      "motorcycle": {
+        "gt": 80,
+        "pred": 128
+      },
+      "truck": {
+        "gt": 1,
+        "pred": 0
+      }
+    }
+  },
+  "track_quality": {
+    "mostly_tracked": 84,
+    "partially_tracked": 44,
+    "mostly_lost": 65,
+    "total_fragmentations": 181,
+    "by_class": {
+      "car": {
+        "MT": 28,
+        "PT": 10,
+        "ML": 26,
+        "frags": 32
+      },
+      "person": {
+        "MT": 32,
+        "PT": 15,
+        "ML": 1,
+        "frags": 70
+      },
+      "motorcycle": {
+        "MT": 24,
+        "PT": 19,
+        "ML": 37,
+        "frags": 79
+      },
+      "truck": {
+        "MT": 0,
+        "PT": 0,
+        "ML": 1,
+        "frags": 0
+      }
+    }
+  },
+  "metrics": {
+    "OVERALL": {
+      "f1": 0.7532,
+      "precision": 0.8552,
+      "recall": 0.6729,
+      "mota_pct": 55.81,
+      "motp_avg_iou_pct": 95.02,
+      "idf1_pct": 73.27,
+      "id_switches": 40,
+      "fragmentations": 181,
+      "FP": 5371,
+      "FN": 15420,
+      "TP": 31722,
+      "total_gt_boxes": 47142
+    },
+    "car": {
+      "f1": 0.6193,
+      "precision": 0.8483,
+      "recall": 0.4877,
+      "mota_pct": 40.02,
+      "motp_avg_iou_pct": 96.64,
+      "idf1_pct": 61.66,
+      "id_switches": 6,
+      "fragmentations": 32,
+      "FP": 1517,
+      "FN": 8914,
+      "TP": 8486,
+      "total_gt_boxes": 17400
+    },
+    "person": {
+      "f1": 0.7975,
+      "precision": 0.8093,
+      "recall": 0.7861,
+      "mota_pct": 60.04,
+      "motp_avg_iou_pct": 96.57,
+      "idf1_pct": 77.76,
+      "id_switches": 5,
+      "fragmentations": 70,
+      "FP": 2296,
+      "FN": 2650,
+      "TP": 9741,
+      "total_gt_boxes": 12391
+    },
+    "motorcycle": {
+      "f1": 0.4911,
+      "precision": 0.5322,
+      "recall": 0.4558,
+      "mota_pct": 5.46,
+      "motp_avg_iou_pct": 93.7,
+      "idf1_pct": 47.67,
+      "id_switches": 10,
+      "fragmentations": 79,
+      "FP": 6840,
+      "FN": 9291,
+      "TP": 7783,
+      "total_gt_boxes": 17074
+    },
+    "truck": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "mota_pct": 0.0,
+      "motp_avg_iou_pct": NaN,
+      "idf1_pct": 0.0,
+      "id_switches": 0,
+      "fragmentations": 0,
+      "FP": 0,
+      "FN": 277,
+      "TP": 0,
+      "total_gt_boxes": 277
+    }
+  }
+}
