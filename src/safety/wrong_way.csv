@@ -1,9 +1,0 @@
-track_id,class_name,start_frame,violation_type
-112,person,110,Wrong-Way
-193,car,343,Wrong-Way
-203,motorcycle,635,Wrong-Way
-226,person,412,Wrong-Way
-260,motorcycle,622,Wrong-Way
-278,person,685,Wrong-Way
-283,motorcycle,686,Wrong-Way
-295,person,641,Wrong-Way

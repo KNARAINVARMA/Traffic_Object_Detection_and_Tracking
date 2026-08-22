@@ -1,7 +1,6 @@
 # Virtual environments
 .venv/
 venv/
-venv_roboflow/
 env/
 ENV/
 
@@ -12,19 +11,8 @@ __pycache__/
 *.so
 .Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
 *.egg
 
 # IDE
@@ -34,34 +22,30 @@ wheels/
 *.swo
 *~
 .DS_Store
+Thumbs.db
 
-# Large model files
+# Large model files & weights
 *.pt
 *.pth
 *.onnx
+*.joblib
 yolov8*.pt
 
-# Large video files (except annotated ones we want to keep)
+# Video files (exclude generated conflict annotations if needed)
 *.mp4
+*.MP4
+*.avi
+*.mov
 !outputs/safety_v4/*conflict_annotated.mp4
 !outputs/safety_v4_events/*conflict_annotated.mp4
 
-# Generated outputs (except key results)
+# Generated outputs & logs
 outputs/csv/
 outputs/video/
+outputs/checkpoints/
+outputs/metrics/
 outputs_v2/
-
-# Temporary files
 *.tmp
 *.temp
 .cache/
 *.log
-
-# OS files
-.DS_Store
-Thumbs.db
-*.mp4
-
-# Rule and analysis CSV outputs
-rule.csv
-src/safety/shortcut_analysis.csv
