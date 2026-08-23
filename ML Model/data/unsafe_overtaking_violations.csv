@@ -1,0 +1,14 @@
+track_id,overtaken_vehicle_id,class_name,start_frame,location,violation_type,reason
+22,664,car,693,restricted zone,Unsafe Overtaking,Vehicle 22 overtook 664 inside restricted roundabout zone after approaching from the same direction
+93,664,car,687,restricted zone,Unsafe Overtaking,Vehicle 93 overtook 664 inside restricted roundabout zone after approaching from the same direction
+324,730,car,1833,restricted zone,Unsafe Overtaking,Vehicle 324 overtook 730 inside restricted roundabout zone after approaching from the same direction
+790,795,motorcycle,1928,restricted zone,Unsafe Overtaking,Vehicle 790 overtook 795 inside restricted roundabout zone after approaching from the same direction
+811,874,car,2175,restricted zone,Unsafe Overtaking,Vehicle 811 overtook 874 inside restricted roundabout zone after approaching from the same direction
+1480,1538,motorcycle,4241,restricted zone,Unsafe Overtaking,Vehicle 1480 overtook 1538 inside restricted roundabout zone after approaching from the same direction
+1480,1592,motorcycle,4407,restricted zone,Unsafe Overtaking,Vehicle 1480 overtook 1592 inside restricted roundabout zone after approaching from the same direction
+2139,2140,motorcycle,6231,restricted zone,Unsafe Overtaking,Vehicle 2139 overtook 2140 inside restricted roundabout zone after approaching from the same direction
+2399,2412,motorcycle,7176,restricted zone,Unsafe Overtaking,Vehicle 2399 overtook 2412 inside restricted roundabout zone after approaching from the same direction
+2399,2423,motorcycle,7092,restricted zone,Unsafe Overtaking,Vehicle 2399 overtook 2423 inside restricted roundabout zone after approaching from the same direction
+2406,2407,motorcycle,7061,restricted zone,Unsafe Overtaking,Vehicle 2406 overtook 2407 inside restricted roundabout zone after approaching from the same direction
+2407,2423,motorcycle,7092,restricted zone,Unsafe Overtaking,Vehicle 2407 overtook 2423 inside restricted roundabout zone after approaching from the same direction
+2789,2795,car,8128,restricted zone,Unsafe Overtaking,Vehicle 2789 overtook 2795 inside restricted roundabout zone after approaching from the same direction
