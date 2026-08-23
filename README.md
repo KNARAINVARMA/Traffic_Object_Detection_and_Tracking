@@ -30,13 +30,13 @@ This project implements a **production-grade, modular computer vision pipeline**
 
 ### Tracked classes
 
-| Class | COCO ID |
-|---|---|
-| person | 0 |
-| car | 2 |
-| motorcycle | 3 |
-| bus | 5 |
-| truck | 7 |
+| Class      | COCO ID |
+| ---------- | ------- |
+| person     | 0       |
+| car        | 2       |
+| motorcycle | 3       |
+| bus        | 5       |
+| truck      | 7       |
 
 ---
 
@@ -44,12 +44,12 @@ This project implements a **production-grade, modular computer vision pipeline**
 
 Standard off-the-shelf detection + tracking pipelines (like naive YOLO + SORT) fail catastrophically on dense Indian intersection footage for four interconnected reasons:
 
-| Challenge | Root cause | Effect |
-|---|---|---|
-| Small objects | Drone altitude + standard network downsampling | Cars appear as 10×5 px blobs; detection recall drops below 40% |
-| Dense packing | Vehicles touching / overlapping (no lane discipline) | High IoU between unrelated objects; correct matches rejected or merged |
-| Frequent occlusion | Pedestrians behind vehicles, vehicles behind buses | ID switches every 1–2 seconds due to tracker logic failures |
-| Misleading pixel speeds | No pixel-to-metre calibration | Velocity-based safety rules fire on false positives due to projection distortion |
+| Challenge               | Root cause                                           | Effect                                                                           |
+| ----------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Small objects           | Drone altitude + standard network downsampling       | Cars appear as 10×5 px blobs; detection recall drops below 40%                   |
+| Dense packing           | Vehicles touching / overlapping (no lane discipline) | High IoU between unrelated objects; correct matches rejected or merged           |
+| Frequent occlusion      | Pedestrians behind vehicles, vehicles behind buses   | ID switches every 1–2 seconds due to tracker logic failures                      |
+| Misleading pixel speeds | No pixel-to-metre calibration                        | Velocity-based safety rules fire on false positives due to projection distortion |
 
 This pipeline addresses all four problems systematically with a combination of Slicing Aided Hyper Inference (SAHI), a Transformer-based detection backbone (RT-DETRv2-X/DINO), and a heavily customized 10-layer tracking algorithm.
 
@@ -124,23 +124,30 @@ Input Video
 ## 4. Design Decisions
 
 ### 4.1 RT-DETRv2-X (DINO) vs. YOLO
-While YOLOv8 is an anchor-free CNN, the pipeline defaults to `rtdetr-x.pt` (Real-Time DETR with DINO enhancements). 
+
+While YOLOv8 is an anchor-free CNN, the pipeline defaults to `rtdetr-x.pt` (Real-Time DETR with DINO enhancements).
+
 - **Bipartite Matching vs NMS:** CNNs rely on Non-Maximum Suppression (NMS), which aggressively deletes overlapping boxes—erasing motorcycles driving next to cars. RT-DETR outputs a fixed set of predictions using multi-scale attention, natively preserving heavily occluded and overlapping vehicles.
 - **Confidence Stability:** DINO minimizes confidence flickering across consecutive frames, providing the temporal stability that ByteTrack demands.
 
 ### 4.2 SAHI Tiling + Weighted Box Fusion
+
 YOLO/DETR downsample the input. A 4K video car occupying 40×20 pixels gets downsampled to ~13×7 pixels.
+
 - **Tiling:** SAHI dynamically slices the 1920x1080 frame into a 3x3 overlapping grid. A small motorcycle is mathematically magnified by 3x before hitting the network, boosting recall by 400% for tiny objects.
 - **Weighted Box Fusion (WBF):** Replaces basic IoU-NMS to merge bounding boxes originating from tile overlaps seamlessly, preventing duplicate "ghost" tracks.
 
 ### 4.3 10-Layer Tracking Mechanics
+
 Standard SORT fails in dense crowds because partial occlusion drops confidence, breaking the track. We use a heavily customized ByteTrack loop:
+
 1. **Distance-IoU (DIoU):** Penalizes matches where bounding box centers don't align, preventing a bus from "absorbing" a motorcycle track.
 2. **Tri-Modal ReID:** Extracts ResNet50 spatial features and 512-bin HSV color histograms for every vehicle, using exponential moving averages to maintain identity through shadows.
 3. **Dynamic Kalman Noise:** Process noise expands/shrinks proportionally based on the vehicle's bounding box height and width, handling sudden braking natively.
 4. **OC-SORT Recovery:** If a track is lost for 15 frames, the tracker discards the drifted Kalman prediction and uses Observation-Centric state repair to manually reconnect the trajectory vector.
 
 ### 4.4 Pixel-to-Metre Homography
+
 Velocity-based safety rules cannot run on pixels. The pipeline converts pixel centers `(cx, cy)` into physical metric coordinates `(world_x, world_y)` using a dynamic scale factor (e.g., `real_length_m / pixel_length_px`). A moving average smoother eliminates quantisation jitter to prevent false "sudden acceleration" alarms.
 
 ---
@@ -150,6 +157,7 @@ Velocity-based safety rules cannot run on pixels. The pipeline converts pixel ce
 The pipeline includes a dedicated `src/safety/` module designed to ingest the output tracking CSV (`outputs/csv/...`) and run surrogate safety algorithms.
 
 **Active Safety Rules (`src/safety/`):**
+
 - **Safe Space Rule:** Computes leading distance between consecutive vehicles; flags tailgating violations based on vehicle class dynamics.
 - **Wrong-Way Driving:** Calculates trajectory heading against mapped lane polygons.
 - **Unsafe Overtaking:** Analyzes lateral and longitudinal velocity differentials to flag aggressive cut-ins.
@@ -184,7 +192,7 @@ pip install -r requirements.txt
 # cp /path/to/intersection.mp4 data/video/
 ```
 
-*Note: The RT-DETR model weights (`rtdetr-l.pt` and `rtdetr-x.pt`) are tracked locally but excluded from Git due to size. Ensure they are present in the project root or they will auto-download on the first run.*
+_Note: The RT-DETR model weights (`rtdetr-l.pt` and `rtdetr-x.pt`) are tracked locally but excluded from Git due to size. Ensure they are present in the project root or they will auto-download on the first run._
 
 ---
 
@@ -203,6 +211,7 @@ python main.py --input ../data/video/test_10.mp4
 ```
 
 This will:
+
 - Detect and track using `rtdetr-l.pt` with SAHI overlapping tiles.
 - Write a clean-draw annotated video to `outputs/video/`.
 - Write the final tracking data to `outputs/csv/`.
@@ -228,10 +237,13 @@ python main.py \
 ```
 
 ### Generating Metric Diagnostics
+
 To compare the output against ground truth XML annotations (CVAT format):
+
 ```bash
 python evaluate_metrics.py
 ```
+
 This generates precision/recall, MOTP, track fragmentation analysis, and timing diagnostics in `ground_truth/metrics_report.txt`.
 
 ---
@@ -240,36 +252,38 @@ This generates precision/recall, MOTP, track fragmentation analysis, and timing 
 
 The pipeline has been rigorously evaluated against manual CVAT bounding-box annotations (`groundtruth.xml`) for a highly dense testing video (`full1.MP4`). The following metrics demonstrate the tracker's capabilities in extreme congestion:
 
-| Class | MOTA (Tracking Accuracy) | IDF1 (ID Consistency) | F1 Score | Recall | Precision |
-|---|---|---|---|---|---|
-| **OVERALL** | **55.81%** | **73.27%** | **0.7532** | 0.6729 | 0.8552 |
-| **Person** | 60.04% | 77.76% | 0.7975 | 0.7861 | 0.8093 |
-| **Car** | 40.02% | 61.66% | 0.6193 | 0.4877 | 0.8483 |
-| **Motorcycle** | 5.46% | 47.67% | 0.4911 | 0.4558 | 0.5322 |
+| Class          | MOTA (Tracking Accuracy) | IDF1 (ID Consistency) | F1 Score   | Recall | Precision |
+| -------------- | ------------------------ | --------------------- | ---------- | ------ | --------- |
+| **OVERALL**    | **55.81%**               | **73.27%**            | **0.7532** | 0.6729 | 0.8552    |
+| **Person**     | 60.04%                   | 77.76%                | 0.7975     | 0.7861 | 0.8093    |
+| **Car**        | 40.02%                   | 61.66%                | 0.6193     | 0.4877 | 0.8483    |
+| **Motorcycle** | 5.46%                    | 47.67%                | 0.4911     | 0.4558 | 0.5322    |
 
-*Note: The high overall IDF1 (73.27%) confirms that the 10-layer ByteTrack+OC-SORT architecture successfully preserves object identities over time, solving the massive ID fragmentation typical of drone footage. The lower motorcycle MOTA is an expected artifact of extreme 2-wheeler occlusion in Indian traffic, which is heavily mitigated by the pipeline's high Precision (85.5% overall).*
+_Note: The high overall IDF1 (73.27%) confirms that the 10-layer ByteTrack+OC-SORT architecture successfully preserves object identities over time, solving the massive ID fragmentation typical of drone footage. The lower motorcycle MOTA is an expected artifact of extreme 2-wheeler occlusion in Indian traffic, which is heavily mitigated by the pipeline's high Precision (85.5% overall)._
 
 ---
 
 ## 9. Expected Output
 
 ### Annotated Video
+
 - **Clean Draw UI:** Color-coded bounding boxes mapped to the 5 object classes.
 - **Polyline History:** The last 40 frames of the vehicle's smoothed trajectory fading out behind it.
 
 ### Tracking CSV Data
+
 One row per (frame, track_id) pair:
 
-| Column | Type | Description |
-|---|---|---|
-| `frame` | int | 0-based video frame index |
-| `track_id` | int | Persistent unique ID across entire video |
-| `class_name` | str | Detected class label |
-| `x1, y1, x2, y2` | float | Bounding box pixel coordinates |
-| `center_x, center_y` | float | Smoothed box centre (pixels) |
-| `world_x, world_y` | float | Centre converted to metres |
-| `confidence` | float | Detector probability score [0, 1] |
-| `velocity_ms` | float | Speed estimate in m/s |
+| Column               | Type  | Description                              |
+| -------------------- | ----- | ---------------------------------------- |
+| `frame`              | int   | 0-based video frame index                |
+| `track_id`           | int   | Persistent unique ID across entire video |
+| `class_name`         | str   | Detected class label                     |
+| `x1, y1, x2, y2`     | float | Bounding box pixel coordinates           |
+| `center_x, center_y` | float | Smoothed box centre (pixels)             |
+| `world_x, world_y`   | float | Centre converted to metres               |
+| `confidence`         | float | Detector probability score [0, 1]        |
+| `velocity_ms`        | float | Speed estimate in m/s                    |
 
 ---
 
@@ -307,4 +321,4 @@ Traffic_Object_Detection_and_Tracking/
 
 ---
 
-*Built for academic research on automated traffic safety analysis at Indian intersections.*
+_Built for academic research on automated traffic safety analysis at Indian intersections._
