@@ -158,11 +158,13 @@ The pipeline includes a dedicated `src/safety/` module designed to ingest the ou
 
 **Active Safety Rules (`src/safety/`):**
 
-- **Safe Space Rule:** Computes leading distance between consecutive vehicles; flags tailgating violations based on vehicle class dynamics.
-- **Wrong-Way Driving:** Calculates trajectory heading against mapped lane polygons.
-- **Unsafe Overtaking:** Analyzes lateral and longitudinal velocity differentials to flag aggressive cut-ins.
-- **Roundabout / Shortcut Violations:** Uses spatial zoning to detect vehicles cutting over medians or taking illegal trajectory shortcuts.
-- **Machine Learning Integration:** Uses `models/ml_safety_model.joblib` to classify complex interaction behaviors (Aggressor/Victim dynamics) based on extracted trajectory features.
+- **Safe Space Rule (`safe_space_rule.py`):** Computes leading distance between consecutive vehicles; flags tailgating violations based on vehicle class dynamics.
+- **Wrong-Way Driving (`wrong_way_rule.py`):** Calculates trajectory heading against mapped lane polygons to detect counter-clockwise flow violations.
+- **Erratic Lane Weaving (`jittering_rule.py`):** Tracks physical boundary crosses inside the roundabout to flag unsafe swerving maneuvers.
+
+**Machine Learning Safety Model (`ML Model/`):**
+
+- Features a complete 4-step pipeline that ingests raw tracker output, deduplicates it, extracts a 75-frame spatiotemporal kinematic window, and infers aggressive driving behaviors using a calibrated Random Forest Regressor (`danger_model_production.pkl`). Output is rendered via a multi-level priority masking system.
 
 ---
 
@@ -291,15 +293,17 @@ One row per (frame, track_id) pair:
 
 ```text
 Traffic_Object_Detection_and_Tracking/
-├── data/
-│   └── video/                 ← Input .mp4 footage
+├── data/                      ← Tracker checkpoint data
 ├── docs/                      ← Architectural deep-dives
 ├── ground_truth/              ← Ground truth XML and metric reports
-├── ML Model/                  ← Scripts for training the ML safety model
-├── models/                    ← Pickled joblib models (Safety ML)
+├── ML Model/                  ← Machine Learning safety prediction pipeline
+│   ├── danger_model_production.pkl ← Serialized trained ML model
+│   ├── step1_build_master.py  ← Data aggregation and compilation
+│   ├── step2_feature_engineering.py ← Spatiotemporal kinematic extraction
+│   ├── step3_train_final.py   ← RF Regressor + Calibration training
+│   └── step4_visualize.py     ← Video inference and rendering
 ├── outputs/
 │   ├── csv/                   ← Final trajectory CSV outputs
-│   ├── safety_v4/             ← Rule-based safety analysis reports
 │   └── video/                 ← Rendered tracking videos
 └── src/
     ├── main.py                ← Core pipeline orchestrator
@@ -316,7 +320,13 @@ Traffic_Object_Detection_and_Tracking/
     ├── diagnostics.py         ← Output analysis tool
     ├── visualize_csv.py       ← Clean-draw video generator from CSV
     ├── annotation_server.py   ← Local server for web annotation tool
-    └── safety/                ← Downstream surrogate safety rule modules
+    └── safety/                ← Downstream surrogate safety rules
+        ├── csv_outputs/       ← Output raw safety violations
+        ├── visualizations/    ← Image snapshots of violations
+        ├── jittering_rule.py  ← Erratic lane weaving detection
+        ├── safe_space_rule.py ← Tailgating detection
+        ├── wrong_way_rule.py  ← Counter-clockwise driving detection
+        └── zone.py            ← Intersection geometric utility
 ```
 
 ---
