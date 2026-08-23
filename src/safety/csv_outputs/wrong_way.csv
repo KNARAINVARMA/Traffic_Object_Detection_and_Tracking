@@ -1,0 +1,9 @@
+track_id,class_name,start_frame,violation_type
+1060,motorcycle,2764,Wrong-Way
+1080,car,2800,Wrong-Way
+1123,car,2989,Wrong-Way
+1319,bus,3648,Wrong-Way
+1371,car,4518,Wrong-Way
+1629,car,4507,Wrong-Way
+2538,car,7866,Wrong-Way
+2984,car,8740,Wrong-Way
