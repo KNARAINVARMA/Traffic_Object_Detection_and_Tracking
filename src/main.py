@@ -116,20 +116,20 @@ def build_parser() -> argparse.ArgumentParser:
     det.add_argument("--conf",   type=float, default=0.10, help="Detection confidence threshold.")
     det.add_argument("--iou",    type=float, default=0.50, help="NMS IoU threshold.")
     det.add_argument(
-        "--tile-grid", default="6x6",
+        "--tile-grid", default="3x3",
         help="Tiling grid as ROWSxCOLS (e.g. '2x2' or '3x3') for YOLOv8. Use '1x1' to disable tiling.",
     )
-    det.add_argument("--tile-overlap", type=float, default=0.60,
-                     help="Fractional overlap between adjacent tiles (0.0–0.75) for YOLOv8.")
+    det.add_argument("--tile-overlap", type=float, default=0.20,
+                     help="Fractional overlap between adjacent tiles (0.0–0.4) for YOLOv8.")
     det.add_argument("--tta", action="store_true",
                      help="Enable test-time augmentation for YOLOv8 (slower, more accurate).")
-    det.add_argument("--slice-height", type=int, default=384,
+    det.add_argument("--slice-height", type=int, default=512,
                      help="SAHI slice height.")
-    det.add_argument("--slice-width", type=int, default=384,
+    det.add_argument("--slice-width", type=int, default=512,
                      help="SAHI slice width.")
-    det.add_argument("--overlap-height-ratio", type=float, default=0.75,
+    det.add_argument("--overlap-height-ratio", type=float, default=0.40,
                      help="SAHI slice overlap height ratio.")
-    det.add_argument("--overlap-width-ratio", type=float, default=0.75,
+    det.add_argument("--overlap-width-ratio", type=float, default=0.40,
                      help="SAHI slice overlap width ratio.")
     det.add_argument("--device", default=None,
                      help="Inference device: 'cuda', 'cpu', 'mps', or '0' for GPU index.")
@@ -210,15 +210,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--verbose", "-v", action="store_true",
                    help="Enable DEBUG-level logging.")
 
-    # ---- Checkpoint / Resume ------------------------------------------------
-    ckpt = p.add_argument_group("Checkpoint / Resume")
-    ckpt.add_argument("--enable-checkpoint", action="store_true",
-                      help="Save a checkpoint every N frames so the run can be resumed after a crash.")
-    ckpt.add_argument("--checkpoint-interval", type=int, default=300,
-                      help="Save a checkpoint every this many frames (default: 300).")
-    ckpt.add_argument("--resume", action="store_true",
-                      help="Resume processing from the last saved checkpoint for this input video.")
-
     return p
 
 
@@ -264,30 +255,6 @@ def run(args: argparse.Namespace) -> dict:
     output_csv = args.output_csv or f"outputs/csv/{stem}_tracks.csv"
     ensure_dir(str(Path(output_csv).parent))
 
-    # ---- Checkpoint paths ---------------------------------------------------
-    ckpt_dir  = Path("outputs/checkpoints")
-    ckpt_path = ckpt_dir / f"{stem}_ckpt.json"
-    ensure_dir(str(ckpt_dir))
-
-    # ---- Load checkpoint if resuming ----------------------------------------
-    resume_from_frame = 0
-    append_csv = False
-    if args.resume and ckpt_path.exists():
-        import json
-        with open(ckpt_path) as f:
-            ckpt = json.load(f)
-        resume_from_frame = ckpt.get("last_completed_frame", 0) + 1
-        next_track_id     = ckpt.get("next_track_id", 1)
-        append_csv        = True
-        STrack.reset_id_counter(start=next_track_id)
-        logger.info(
-            "Resuming from checkpoint: frame %d, next_track_id=%d",
-            resume_from_frame, next_track_id
-        )
-    else:
-        if args.resume:
-            logger.warning("No checkpoint found at %s. Starting from frame 0.", ckpt_path)
-
     # ---- Open video ---------------------------------------------------------
     cap = cv2.VideoCapture(str(input_path))
     if not cap.isOpened():
@@ -300,11 +267,6 @@ def run(args: argparse.Namespace) -> dict:
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     if args.max_frames:
         total_frames = min(total_frames, args.max_frames)
-
-    # Seek to resume frame
-    if resume_from_frame > 0:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, resume_from_frame)
-        logger.info("Seeked video to frame %d", resume_from_frame)
 
     logger.info(
         "Video: %s  |  %dx%d @ %.1f fps  |  %d frames",
@@ -409,43 +371,28 @@ def run(args: argparse.Namespace) -> dict:
         "motorcycle_detections": 0,
     }
 
-    # ---- Per-step timing accumulators ----------------------------------------
-    t_read_total     = 0.0
-    t_detect_total   = 0.0
-    t_postproc_total = 0.0
-    t_track_total    = 0.0
-    t_smooth_total   = 0.0
-    t_export_total   = 0.0
-
     # ---- Main loop ----------------------------------------------------------
     with Exporter(
         fps               = fps,
-        output_video_path = output_video if not append_csv else None,  # no video on resume
+        output_video_path = output_video,
         output_csv_path   = output_csv,
         frame_size        = (width, height),
         draw_trajectories = not args.no_trajectories,
         trajectory_length = args.trajectory_length,
         clean_draw        = args.clean_draw,
-        append_mode       = append_csv,
     ) as exporter:
 
         with tqdm(total=total_frames, unit="frame", desc="Tracking") as pbar:
-            frame_idx = resume_from_frame
+            frame_idx = 0
             while frame_idx < total_frames:
-                # 1. Read Frame
-                _t0 = time.perf_counter()
                 ret, frame = cap.read()
-                t_read_total += time.perf_counter() - _t0
                 if not ret:
                     break
 
-                # 2. Detect
-                _t0 = time.perf_counter()
+                # 1. Detect
                 detections = detector.detect(frame)
-                t_detect_total += time.perf_counter() - _t0
 
-                # 3. Apply class-aware postprocessing
-                _t0 = time.perf_counter()
+                # Apply class-aware postprocessing
                 from postprocess_vehicle_classes import postprocess_vehicle_detections
                 detections = postprocess_vehicle_detections(
                     detections           = detections,
@@ -465,17 +412,13 @@ def run(args: argparse.Namespace) -> dict:
                     debug_trucks         = args.debug_trucks,
                     stats                = postprocess_stats,
                 )
-                t_postproc_total += time.perf_counter() - _t0
 
                 total_detections += len(detections)
 
-                # 4. Track
-                _t0 = time.perf_counter()
+                # 2. Track
                 tracks = tracker.update(detections, frame)
-                t_track_total += time.perf_counter() - _t0
 
-                # 5. Smooth + map coordinates
-                _t0 = time.perf_counter()
+                # 3. Smooth + map coordinates
                 enriched = []
                 smoother.tick()
                 for t in tracks:
@@ -495,25 +438,9 @@ def run(args: argparse.Namespace) -> dict:
                         "world_x":     wx,
                         "world_y":     wy,
                     })
-                t_smooth_total += time.perf_counter() - _t0
 
-                # 6. Export
-                _t0 = time.perf_counter()
+                # 4. Export
                 exporter.process_frame(frame_idx, frame, enriched)
-                t_export_total += time.perf_counter() - _t0
-
-                # ---- Save checkpoint every N frames -------------------------
-                if args.enable_checkpoint and (frame_idx % args.checkpoint_interval == 0):
-                    import json
-                    ckpt_data = {
-                        "last_completed_frame": frame_idx,
-                        "next_track_id": STrack._id_counter,
-                        "input_video": str(input_path),
-                        "output_csv": output_csv,
-                    }
-                    with open(ckpt_path, "w") as f:
-                        json.dump(ckpt_data, f, indent=2)
-                    logger.debug("Checkpoint saved at frame %d -> %s", frame_idx, ckpt_path)
 
                 frame_idx += 1
                 pbar.update(1)
@@ -526,52 +453,6 @@ def run(args: argparse.Namespace) -> dict:
     cap.release()
 
     elapsed = time.perf_counter() - t_start
-
-    # ---- Print timing breakdown ----------------------------------------------
-    n = max(frame_idx, 1)
-    step_times = [
-        ("1. Frame Read",        t_read_total),
-        ("2. Detection (SAHI)",  t_detect_total),
-        ("3. Post-Processing",   t_postproc_total),
-        ("4. Tracking (ByteTrack)", t_track_total),
-        ("5. Smoothing",         t_smooth_total),
-        ("6. Export (Video+CSV)", t_export_total),
-    ]
-    total_instrumented = sum(s for _, s in step_times)
-
-    print("\n" + "="*68)
-    print("  PIPELINE TIMING BREAKDOWN")
-    print("="*68)
-    print(f"  {'Step':<26} {'Total(s)':>9} {'Per Frame':>11} {'% Total':>8}")
-    print("  " + "-"*62)
-    for name, t in step_times:
-        pct = (t / total_instrumented * 100) if total_instrumented > 0 else 0
-        print(f"  {name:<26} {t:>9.2f} {t/n*1000:>9.1f}ms {pct:>7.1f}%")
-    print("  " + "-"*62)
-    print(f"  {'Total (instrumented)':<26} {total_instrumented:>9.2f}")
-    print(f"  Pipeline FPS: {n / max(elapsed, 1e-6):.1f} fps")
-    print("="*68 + "\n")
-
-    # Save timing JSON
-    import json
-    timing_data = {
-        "total_frames": frame_idx,
-        "elapsed_seconds": round(elapsed, 3),
-        "pipeline_fps": round(frame_idx / max(elapsed, 1e-6), 2),
-        "steps": {
-            name: {
-                "total_s": round(t, 4),
-                "per_frame_ms": round(t / n * 1000, 2),
-                "pct_of_total": round(t / total_instrumented * 100, 1) if total_instrumented > 0 else 0
-            } for name, t in step_times
-        }
-    }
-    timing_dir = Path("outputs/metrics")
-    ensure_dir(str(timing_dir))
-    timing_path = timing_dir / f"{stem}_timing_report.json"
-    with open(timing_path, "w") as f:
-        json.dump(timing_data, f, indent=2)
-    logger.info("Timing report saved to %s", timing_path)
 
     # Run post-tracking diagnostics automatically
     try:
