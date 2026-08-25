@@ -1,0 +1,37 @@
+\chapter{Literature Review}
+\label{chap:lit_review}
+
+\section{Motivation and Background}
+
+Road traffic accidents represent a major global public health concern, particularly at unsignalized intersections and roundabouts in developing nations. Traditional safety evaluations rely heavily on historical accident records or manual human observation. However, accident logs are reactive and often under-reported, while manual site inspections are labor-intensive, subjective, and temporally limited. 
+
+Unmanned Aerial Vehicles (UAVs) equipped with high-resolution cameras provide a compelling solution by capturing occlusion-free, bird's-eye views of complex junction dynamics~\cite{drone_roundabout, highway_tracking}. Extracting per-vehicle trajectories from aerial video enables continuous surrogate safety analysis, replacing reactive crash counts with proactive risk indicators~\cite{laureshyn2010}. Computer vision and machine learning provide the essential computational tools to automate this trajectory extraction and safety assessment pipeline.
+
+\section{Vehicle Detection and Tracking}
+
+Transforming raw drone footage into metric trajectories requires robust object detection and persistent multi-object tracking. Standard one-stage detectors such as YOLO~\cite{yolov8_ultralytics} deliver high throughput but suffer recall degradation on small targets ($< 32 \times 32$ pixels) in high-altitude aerial views due to spatial downsampling. Transformer-based architectures like DETR~\cite{detr} and DINO~\cite{dino} improve anchor calibration, while RT-DETRv2~\cite{rtdetr} enables real-time execution. To prevent loss of small vehicle instances, framework-agnostic slicing (SAHI)~\cite{sahi} processes overlapping sub-tiles at native resolution.
+
+For multi-object tracking, IoU-based methods like SORT~\cite{sort} and appearance-augmented DeepSORT~\cite{deepsort} frequently fragment trajectories during temporary occlusions. ByteTrack~\cite{bytetrack} resolves this by retaining low-confidence detections in a two-stage association cascade, preserving identity continuity across dense traffic streams. In our pipeline, we combine SAHI-tiled DINO detection with ByteTrack tracking to produce continuous vehicle trajectories.
+
+\section{Trajectory-Based Safety Rules}
+
+Trajectory-based safety assessment evaluates vehicle interaction kinematics against physical or geometric criteria. Research on European roundabouts~\cite{drone_roundabout} and urban junctions~\cite{china_traffic, guennouni2023} demonstrates that trajectory features (inter-vehicle distance, relative velocity, and angular progression) effectively characterize interaction severity. Standard rule-based frameworks enforce deterministic thresholds to flag specific infractions, such as red-light running or illegal lane changes~\cite{huang2022}. While rule-based systems offer complete physical explainability, rigid threshold boundaries struggle to capture subtle, multi-vehicle near-miss dynamics that do not violate a single isolated rule.
+
+\section{Machine Learning for Traffic Safety}
+
+Machine learning models learn complex, non-linear risk patterns directly from trajectory feature spaces. Prior studies have applied Support Vector Machines~\cite{svm_conflict}, Recurrent Neural Networks~\cite{lstm_conflict}, and Random Forests~\cite{rf_conflict, zeng2020} to predict traffic conflicts at intersections. Post-hoc isotonic regression calibration~\cite{isotonic} further transforms raw ensemble regression outputs into true empirical probabilities. 
+
+Existing machine learning approaches typically rely either on synthetic simulation data or on purely manually annotated datasets. However, manual annotation is poorly scalable, while simulation data lacks the chaotic realism of undisciplined mixed-modal traffic.
+
+\section{Research Gap and System Uniqueness}
+
+Existing traffic safety literature generally focuses on isolated pipeline stages: (i)~pure detection and tracking, (ii)~hand-designed rule-based violation detection, (iii)~manual dangerous-event annotation, or (iv)~end-to-end ML prediction without physical rules.
+
+Our project explores a different, integrated progression:
+\begin{align*}
+&\text{Traffic Video} \rightarrow \text{Object Detection + Tracking} \rightarrow \text{World Trajectory Representation} \\
+&\rightarrow \text{Explicit Safety Rules} \rightarrow \left[\text{Safety-Rule Outputs} + \text{Manual Annotations}\right] \\
+&\rightarrow \text{ML Dataset} \rightarrow \text{Machine-Learning Model}
+\end{align*}
+
+The central contribution of our architecture is that \textbf{we did not stop at rule-based safety detection}. Instead, we utilized the structured outputs of our five deterministic safety rules alongside manually annotated dangerous traffic instances to construct a hybrid dataset, experimenting with training a calibrated Machine Learning model to predict continuous Safe vs. Dangerous traffic risk. This progression --- \emph{Rule-based analysis $\rightarrow$ structured safety information $\rightarrow$ ML-based learning} --- combines explicit physical explainability with adaptive data-driven learning.

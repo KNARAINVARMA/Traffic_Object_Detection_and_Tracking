@@ -1,0 +1,44 @@
+\chapter{Discussion, Limitations, and Future Work}
+\label{chap:discussion}
+
+\section{Discussion of Key Findings}
+
+The experimental results validate the core hypothesis of this thesis: an integrated pipeline combining high-recall
+detection, metric coordinate mapping, rule-based reasoning, and calibrated machine learning can automatically
+characterize traffic safety in dense overhead video without specialized ground sensors.
+
+Key insights include:
+\begin{itemize}
+    \item \textbf{SAHI + DINO Detection:} Slicing aerial imagery prevents downsampling loss for small vehicles.
+          The contrastive denoising head in DINO stabilizes confidence across adjacent tiles, enabling cleaner
+          box fusion and reducing track initialization errors.
+    \item \textbf{Physical Calibration via Laser Measurement:} Grounding the scale factor in a physical field measurement
+          (7.0 m lane width measured with a laser distance meter) establishes a direct physical meaning for spatial
+          thresholds across all downstream rules and ML models.
+    \item \textbf{Hybrid Rule-ML Pipeline:} Deterministic safety rules provide clear physical interpretations for
+          specific infractions while generating high-volume weak supervision. Combining rule outputs with manually
+          annotated ground-truth conflicts allows the ML model to learn complex, non-linear interaction dynamics.
+\end{itemize}
+
+\section{Limitations}
+
+\begin{enumerate}
+    \item \textbf{Uniform Scale Factor Assumption:} Converting image coordinates using a uniform scale factor
+          ($s \approx 0.0824$ m/px) assumes a strictly nadir camera perspective. Small camera tilt angles cause slight
+          scale distortion near frame borders.
+    \item \textbf{Motorcycle Tracking Identity Shifts:} Heavy motorcycle clustering leads to identity switches (IDF1 47.67\%)
+          due to high visual similarity and frequent mutual occlusions.
+    \item \textbf{Single-Intersection Validation:} All evaluation was performed on video captured at one specific
+          roundabout. Broad generalizability across diverse intersection geometries remains to be benchmarked.
+\end{enumerate}
+
+\section{Future Work}
+
+\begin{itemize}
+    \item \textbf{Multi-Point Homography Calibration:} Incorporate a full 4-point planar homography matrix using ground control
+          points to eliminate tilt-induced scale variation across the image.
+    \item \textbf{Graph Neural Network Conflict Models:} Model vehicle interactions as dynamic spatial-temporal graphs
+          to capture multi-vehicle group interactions beyond pairwise relationships.
+    \item \textbf{Multi-Site Benchmark Datasets:} Expand drone video acquisition to multiple heterogeneous unsignalized
+          intersections across different weather and lighting conditions.
+\end{itemize}

@@ -1,0 +1,243 @@
+%% ============================================================
+%%  Traffic Object Detection, Tracking and Safety Analysis
+%%  B.Tech Project Thesis
+%%
+%%  Main driver file — \includes all chapter files.
+%%  Follows the structural and package conventions of the
+%%  professor's report.md template (pkmthesis-compatible).
+%%
+%%  To compile:
+%%    1. pdflatex thesis.tex
+%%    2. bibtex thesis
+%%    3. pdflatex thesis.tex
+%%    4. pdflatex thesis.tex
+%% ============================================================
+
+\documentclass[12pt,a4paper]{report}
+
+%% ---- Packages (identical to report.md preamble) ----
+\usepackage{amsmath,amssymb,epsfig,graphicx,setspace,url,float}
+\usepackage{lscape,multicol,multirow,longtable,subfigure}
+\usepackage{cite,bm}
+\usepackage{geometry}
+\usepackage{array}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage[english]{babel}
+\usepackage[small,bf]{caption}
+\usepackage{csquotes}
+\usepackage{threeparttable}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+%% ---- Page layout ----
+\geometry{a4paper, top=2.5cm, bottom=2.5cm, left=3.5cm, right=2.5cm, headheight=15pt}
+\setlength{\abovecaptionskip}{8pt}
+\setlength{\belowcaptionskip}{8pt}
+\setlength{\textfloatsep}{1cm}
+\raggedbottom
+
+%% ---- hyperref ----
+\hypersetup{
+  colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue,
+  pdftitle={Traffic Object Detection, Tracking and Safety Analysis},
+  pdfauthor={K. Narain Varma}
+}
+
+%% ---- Listings ----
+\lstset{basicstyle=\ttfamily\small,breaklines=true,frame=single,
+        keywordstyle=\color{blue}\bfseries,commentstyle=\color{gray},
+        stringstyle=\color{red!70!black},numbers=left,
+        numberstyle=\tiny\color{gray},tabsize=4,showstringspaces=false}
+
+%% ===========================================================
+\begin{document}
+
+\setcounter{page}{1}
+\pagenumbering{roman}
+\doublespacing
+
+%% ---- Title page -------------------------------------------
+\begin{titlepage}
+\thispagestyle{empty}
+\begin{center}
+    \vspace*{0.5cm}
+    {\Large\bfseries Traffic Object Detection, Tracking, and Automated Safety\\
+    Analysis at an Indian Roundabout Intersection}\\[2cm]
+    {\large A B.Tech Project Report submitted in partial fulfilment of the requirements
+    for the degree of Bachelor of Technology}\\[1.5cm]
+    {\large by}\\[0.5cm]
+    {\Large\bfseries K. Narain Varma}\\[0.3cm]
+    {\large Roll No.\ [TO BE FILLED]}\\[2cm]
+    {\large Under the Supervision of}\\[0.5cm]
+    {\Large\bfseries [Supervisor Name]}\\[0.3cm]
+    {\large [Designation]}\\[2cm]
+    \vfill
+    {\large\bfseries Department of [Department Name]}\\[0.3cm]
+    {\large [Institute Name]}\\[0.5cm]
+    {\large [City, State, India]}\\[0.3cm]
+    {\large [Month and Year]}
+\end{center}
+\end{titlepage}
+\clearpage\thispagestyle{empty}
+
+%% ---- Certificate ------------------------------------------
+\newpage\thispagestyle{empty}
+\chapter*{Certificate}
+\addcontentsline{toc}{chapter}{Certificate}
+\vspace{1cm}
+
+This is to certify that the project titled \textbf{``Traffic Object Detection, Tracking,
+and Automated Safety Analysis at an Indian Roundabout Intersection''} submitted by
+\textbf{K. Narain Varma} (Roll No.\ [TO BE FILLED]) in partial fulfilment of the
+requirements for the award of the Degree of \textbf{Bachelor of Technology} is a record of
+bonafide work carried out by the student under our supervision in the Department of
+[Department Name], [Institute Name].
+
+\vspace{2cm}
+\noindent
+\begin{tabular}{p{7cm}p{7cm}}
+\textbf{[Supervisor Name]} & \textbf{[HOD Name]}\\
+{[Designation]}            & Head, Dept.\ of [Department Name]\\
+{[Institute Name]}         & [Institute Name]\\
+{[City, India]}            & [City, India]\\
+\end{tabular}
+
+\clearpage\thispagestyle{empty}
+
+%% ---- Declaration ------------------------------------------
+\newpage\thispagestyle{empty}
+\chapter*{Declaration}
+\addcontentsline{toc}{chapter}{Declaration}
+
+\noindent
+I, \textbf{K. Narain Varma}, hereby declare that the project report entitled
+\textbf{``Traffic Object Detection, Tracking, and Automated Safety Analysis at an Indian
+Roundabout Intersection''}, submitted in partial fulfilment of the requirements for the
+award of the degree of Bachelor of Technology, is my own work and has not been submitted
+elsewhere for the award of any degree or diploma.
+
+\vspace{2cm}
+\noindent
+\textbf{K. Narain Varma}\\
+Roll No.\ [TO BE FILLED]\\
+[Date]
+
+\clearpage\thispagestyle{empty}
+
+%% ---- Acknowledgement --------------------------------------
+\newpage\thispagestyle{empty}
+\chapter*{Acknowledgement}
+\addcontentsline{toc}{chapter}{Acknowledgement}
+
+\noindent
+[Acknowledgement text to be filled by the student.]
+
+\clearpage\thispagestyle{empty}
+
+%% ---- Abstract ---------------------------------------------
+\newpage\thispagestyle{empty}
+\begin{center}{\bfseries Abstract}\end{center}
+{\em\noindent
+This project presents a modular, three-component system for automated traffic safety analysis
+using drone-captured footage of a congested Indian roundabout intersection.
+
+The first component is a detection and tracking pipeline that combines SAHI (Slicing Aided
+Hyper Inference) with a DINO-style RT-DETRv2-X backbone to overcome the dual challenges of small
+object size and extreme vehicle density.  A customised ByteTrack algorithm, augmented with
+ResNet50-based appearance feature extraction, an HSV colour histogram descriptor, and a
+scale-proportional Kalman filter, maintains persistent track identities across the full video
+duration.  A physical road measurement obtained at the intersection using a laser distance meter
+enables real-world metric coordinate calibration.
+
+The second component is a deterministic safety rule engine operating on the exported metric
+trajectory data.  Five rules are implemented: tailgating detection via arc-length computation
+in polar lane coordinates; wrong-way driving detection via angular velocity analysis; erratic
+lane weaving detection via lane-boundary transition counting; unsafe overtaking detection via
+relative polar angle sign-flip monitoring; and vehicle stoppage detection via 90-frame
+displacement and rolling mean velocity thresholds.
+
+The third component is a machine learning conflict prediction model.  A calibrated Random
+Forest Regressor trained on a three-tier weighted dataset of 3{,}652 vehicle interaction
+pairs (combining safety-rule outputs and manually annotated dangerous events), using a
+27-dimensional spatiotemporal kinematic feature vector extracted over a 75-frame horizon,
+achieves a 5-fold cross-validation F1-score of 96.60\%.  Isotonic calibration improves the
+Brier Score to 0.0847 (9.4\% improvement).  The model classifies each vehicle pair into five
+danger levels rendered as colour-coded bounding boxes on the output video.
+
+\medskip
+\noindent\textbf{Keywords:} traffic safety, object detection, object tracking, roundabout,
+ByteTrack, DINO, SAHI, polar coordinates, safety rules, Random Forest, trajectory analysis.
+}
+
+\clearpage\thispagestyle{empty}
+
+%% ---- Front matter -----------------------------------------
+\fancyhf{}
+\fancyhead[LE]{\bfseries\small{Contents}}
+\fancyhead[RO]{\bfseries\small{Contents}}
+\fancyfoot[CE,CO]{\bfseries\thepage}
+\renewcommand{\baselinestretch}{1}
+\tableofcontents\clearpage
+
+\fancyhead[LE]{\bfseries\small{List of Figures}}
+\fancyhead[RO]{\bfseries\small{List of Figures}}
+\listoffigures\clearpage
+
+\fancyhead[LE]{\bfseries\small{List of Tables}}
+\fancyhead[RO]{\bfseries\small{List of Tables}}
+\listoftables\clearpage
+
+%% ---- Main chapters ----------------------------------------
+\fancyhf{}
+\fancyhead[LE]{\bfseries\small{\leftmark}}
+\fancyhead[RO]{\bfseries\small{\rightmark}}
+\fancyfoot[CE,CO]{\bfseries\thepage}
+\setcounter{page}{1}
+\pagenumbering{arabic}
+\renewcommand{\labelenumi}{(\roman{enumi})}
+
+\include{chapters/ch1_introduction}
+\clearpage\thispagestyle{empty}\newpage
+
+\include{chapters/ch2_literature}
+\clearpage\thispagestyle{empty}\newpage
+
+\include{chapters/ch3_system}
+\clearpage\thispagestyle{empty}\newpage
+
+\include{chapters/ch4_detection}
+\clearpage\thispagestyle{empty}\newpage
+
+\include{chapters/ch5_safety}
+\clearpage\thispagestyle{empty}\newpage
+
+\include{chapters/ch6_ml}
+\clearpage\thispagestyle{empty}\newpage
+
+\include{chapters/ch7_results}
+\clearpage\thispagestyle{empty}\newpage
+
+\include{chapters/ch8_discussion}
+\clearpage\thispagestyle{empty}\newpage
+
+\include{chapters/ch9_conclusion}
+\clearpage\thispagestyle{empty}\newpage
+
+%% ---- Bibliography -----------------------------------------
+\fancyhead[LE]{\bfseries\small{Bibliography}}
+\fancyhead[RO]{\bfseries\small{Bibliography}}
+\addcontentsline{toc}{chapter}{Bibliography}
+\bibliographystyle{IEEEtran}
+\bibliography{chapters/references/refs}
+
+\end{document}

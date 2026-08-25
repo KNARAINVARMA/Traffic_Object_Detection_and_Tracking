@@ -1,0 +1,94 @@
+\chapter{Introduction}
+\label{chap:intro}
+
+\section{Background and Motivation}
+
+Road traffic safety is among the foremost public health concerns in developing countries.
+India accounts for a disproportionately large share of global road fatalities, with a
+significant proportion of accidents occurring at uncontrolled or poorly managed intersections.
+Roundabouts --- circular junctions that regulate traffic through yield-based priority rather
+than traffic signals --- are structurally well-suited to reducing conflict severity; however,
+the absence of signal enforcement in Indian roundabouts leads to persistent unsafe behaviours:
+aggressive overtaking, tailgating, wrong-way entry, abrupt stopping within the circulatory
+zone, and erratic lane weaving.
+
+Manual monitoring of such intersections is resource-intensive, subjective, and temporally
+limited.  Unmanned aerial vehicles (UAVs) equipped with downward-facing cameras offer a
+compelling alternative: a stationary overhead drone captures the full spatial extent of an
+intersection without the occlusion that afflicts ground-mounted sensors, and records a
+continuous, repeatable traffic record amenable to offline automated analysis.
+
+\section{Problem Statement}
+
+Given traffic video captured from a drone at an unsignalized roundabout intersection, it is
+difficult to automatically characterise traffic safety because raw video does not directly
+provide structured information about which road users are present, where they are located,
+how they move over time, how vehicles interact spatially, whether their behaviour violates
+predefined safety conditions, or which traffic situations should be considered dangerous.
+
+Addressing this gap requires three tightly coupled sub-problems to be solved in sequence.
+
+\begin{enumerate}
+    \item \textbf{Structured trajectory extraction:}
+          Raw video pixels must be transformed into reliable, persistent per-vehicle
+          trajectories.  Dense Indian intersection footage presents extreme challenges for
+          standard detection and tracking pipelines: vehicles occupy as few as $15 \times 8$
+          pixels at typical drone altitudes; fifty or more road users may be simultaneously
+          present in a single frame; bounding boxes frequently overlap; and partial occlusion
+          causes confidence drops that fragment track identities across time.
+
+    \item \textbf{Meaningful spatial representation:}
+          Trajectories expressed in image/pixel coordinates are not physically meaningful.
+          Safety rules involve real-world distances (e.g., following distance in metres) and
+          speeds (e.g., m/s).  Converting pixel coordinates to world coordinates requires a
+          calibrated pixel-to-metre mapping grounded in actual physical measurements at the
+          intersection.
+
+    \item \textbf{Safety assessment and conflict prediction:}
+          Metric trajectories must be interpreted through explicitly designed safety rules
+          that identify dangerous behaviours.  The outputs of these rules, combined with
+          manually annotated dangerous traffic events, must then be used to train a machine
+          learning model capable of predicting dangerous vehicle interactions.
+\end{enumerate}
+
+This project develops an end-to-end pipeline that addresses all three sub-problems within a
+unified system architecture tailored to the specific characteristics of Indian roundabout
+traffic.
+
+\section{Objectives}
+
+\begin{enumerate}
+    \item To develop a high-recall vehicle detection pipeline for small-object, high-density
+          aerial imagery using SAHI tiling and a DINO-style RT-DETRv2-X detection backbone.
+    \item To implement a robust multi-object tracker (ByteTrack) augmented with appearance-based
+          track association that maintains persistent track identities across the video duration.
+    \item To calibrate pixel coordinates to real-world metric coordinates using physical
+          road measurements obtained at the actual intersection, enabling physically
+          meaningful speed and distance computation.
+    \item To design and implement a deterministic safety rule engine that evaluates five
+          categories of traffic violation --- tailgating, wrong-way driving, erratic lane
+          weaving, unsafe overtaking, and vehicle stoppage --- using geometric and temporal
+          conditions derived from the metric trajectory data.
+    \item To construct a training dataset from safety-rule outputs and manually annotated
+          dangerous traffic events, and to train a calibrated machine learning model capable
+          of assigning probabilistic danger scores to vehicle interaction pairs.
+\end{enumerate}
+
+\section{Scope of Work}
+
+The project analyses a set of traffic video recordings of an Indian roundabout intersection
+captured from a stationary overhead drone.  All processing is offline; real-time inference
+is not a requirement.  The three pipeline components --- detection and tracking, safety rule
+evaluation, and machine learning --- operate on these recordings but are designed to generalise
+to similar overhead footage.
+
+\section{Organisation of the Report}
+
+Chapter~\ref{chap:lit_review} reviews related work.
+Chapter~\ref{chap:proposed} presents the system architecture and data flow.
+Chapter~\ref{chap:detection} details the detection, tracking, calibration, and trajectory
+generation methodology.
+Chapter~\ref{chap:safety} documents each safety rule.
+Chapter~\ref{chap:ml} explains the dataset construction and machine learning model.
+Chapter~\ref{chap:results} presents results.
+Chapters~\ref{chap:discussion} and~\ref{chap:conclusion} discuss limitations and conclude.

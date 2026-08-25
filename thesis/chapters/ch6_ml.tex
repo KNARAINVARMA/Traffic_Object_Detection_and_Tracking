@@ -1,0 +1,110 @@
+\chapter{Machine Learning Conflict Prediction Model}
+\label{chap:ml}
+
+\section{Problem Formulation}
+
+While the deterministic safety rules described in Chapter~\ref{chap:safety} detect explicit, predefined rule violations (e.g., tailgating, wrong-way driving), complex traffic interactions often involve subtle kinematic patterns that do not violate any single rigid threshold yet still present significant safety risks. The machine learning component addresses this by learning a probabilistic danger score for arbitrary vehicle interaction pairs from labelled data.
+
+To model vehicle interaction pairs without domain ambiguity, we introduce ML-specific notation replacing legacy terms:
+\begin{itemize}
+    \item \textbf{Aggressor Vehicle ($i$):} The primary vehicle being evaluated or classified (formerly referred to as ego or violating vehicle).
+    \item \textbf{Suppressor Vehicle ($j$):} The relevant surrounding vehicle whose clearance or path is affected by the aggressor (formerly referred to as surrounding or lead vehicle).
+\end{itemize}
+
+The task is formulated as a regression problem: given the kinematic history of an Aggressor--Suppressor pair $(i, j)$ over a 75-frame retrospective window ($\approx 2.5$ seconds at 30 FPS), predict a continuous danger target score $y \in [0,1]$, where $y = 1$ denotes a critical near-collision interaction. The output score is mapped to five visual danger levels.
+
+\section{Dataset Construction (Hybrid Labelling Strategy)}
+
+The training dataset is constructed by combining two complementary sources of supervision:
+\begin{enumerate}
+    \item \textbf{Manually Annotated Dangerous Events (Tier 1):} Human expert inspection of drone video identified ground-truth dangerous interaction scenarios involving Aggressor vehicles and affected Suppressor vehicles.
+    \item \textbf{Rule-Engine Violations (Tier 2):} Vehicle interaction pairs flagged by the five deterministic safety rules provide abundant, automatically extracted positive instances.
+    \item \textbf{Background Safe Pairs (Tier 3):} Co-present vehicle pairs within a Euclidean distance range of $[2.0, 12.0]$ metres not flagged by Tier 1 or Tier 2 are sampled as safe instances.
+\end{enumerate}
+
+To reflect varying supervision confidence, Table~\ref{tab:weights} defines the target assignments and sample loss weights across tiers.
+
+\begin{table}[H]
+\centering
+\caption{Training sample targets and assigned loss weights by tier and behavioral role.}
+\label{tab:weights}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Source Tier} & \textbf{Role} & \textbf{Sample Targets ($y_i$)} & \textbf{Sample Weight ($w_i$)} \\
+\midrule
+Tier 1 -- Manual    & Aggressor Vehicle  & Dangerous (1.0) & 10.0 \\
+Tier 1 -- Manual    & Suppressor Vehicle & Dangerous (1.0) & 3.0 \\
+Tier 2 -- Automated & Aggressor Vehicle  & Dangerous (1.0) & 3.0 \\
+Tier 2 -- Automated & Suppressor Vehicle & Dangerous (1.0) & 1.0 \\
+Tier 3 -- Background& Safe Pair          & Safe (0.0)      & 1.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The resulting training dataset contains \textbf{3,652 vehicle interaction pairs}: 960 from Tier 1, 866 from Tier 2, and 1,826 from Tier 3.
+
+\section{Manual vs Automatic Annotation Comparison}
+
+Table~\ref{tab:manual_vs_auto} compares manual expert annotation against automated safety-rule annotation across key operational dimensions.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Comparative analysis of Manual Expert Annotation versus Automatic Safety-Rule Annotation.}
+\label{tab:manual_vs_auto}
+\begin{tabularx}{\textwidth}{l X X}
+\toprule
+\textbf{Aspect} & \textbf{Manual Expert Annotation} & \textbf{Automatic / Rule-Based Annotation} \\
+\midrule
+Supervision Focus & Complex, un-modeled evasive events & Predefined physical safety criteria \\
+Scalability       & Labor-intensive for large videos & Highly scalable post-implementation \\
+Consistency       & Subject to human annotator variability & 100\% deterministic under fixed thresholds \\
+Coverage          & Captures novel driver interactions & Restricted to codified rule conditions \\
+Annotation Cost   & High manual verification cost & Zero marginal cost across datasets \\
+Reproducibility   & Dependent on subjective guidelines & Fully reproducible across arbitrary traffic \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Combining manual annotations (high-precision ground truth) with rule-based outputs (high-volume weak supervision) creates a balanced training distribution that optimizes model robustness.
+
+\section{Spatiotemporal Feature Engineering}
+
+For each Aggressor--Suppressor pair $(i, j)$, kinematics are extracted over a 75-frame retrospective window sampled every 6th frame (13 discrete sample steps at offsets $\{0, 6, 12, \ldots, 72\}$). The 27-dimensional feature vector $\mathbf{f} \in \mathbb{R}^{27}$ comprises:
+\begin{equation}
+    \mathbf{f} = \bigl[d_{t_1}, \ldots, d_{t_{13}},\;\theta_{t_1}, \ldots, \theta_{t_{13}},\;v_{\text{rel}}\bigr]^\top
+\end{equation}
+where $d_{t_k}$ is inter-vehicle distance, $\theta_{t_k}$ is relative heading angle, and $v_{\text{rel}} = |v_i - v_j|$ is relative ground speed. No unsupported metrics (such as TTC or PET) are used.
+
+\section{Model Selection Rationale: From Logistic Regression to Random Forest}
+
+In early development stages, we evaluated linear classifiers such as Logistic Regression as a baseline. However, Logistic Regression assumes linear decision boundaries, which proved inadequate for traffic risk prediction due to two major limitations:
+\begin{enumerate}
+    \item \textbf{Non-Linear Kinematic Interactions:} Vehicle conflicts involve non-linear, non-monotonic feature combinations (e.g., a small inter-vehicle distance $d_{ij}$ accompanied by a sharp relative heading change $\theta_{rel}$ signifies a near-miss swerve, whereas the same distance at zero relative heading corresponds to safe parallel cruising). Linear models fail to capture such multi-variable interactions without exhaustive manual feature cross-products.
+    \item \textbf{Continuous Probabilistic Grading for Multi-Level Risk:} Logistic Regression outputs binary decision probabilities that cluster aggressively near 0 or 1, making it difficult to establish well-separated intermediate risk tiers.
+\end{enumerate}
+
+To overcome these baseline limitations, we selected an ensemble \texttt{RandomForestRegressor} (\texttt{n\_estimators} = 300, \texttt{max\_depth} = 10) trained on the sample-weighted feature dataset. Random Forest decision trees naturally partition the 27-dimensional non-linear feature space without requiring explicit interaction terms. By formulating the target as continuous regression $y \in [0, 1]$ combined with out-of-fold Isotonic Calibration, the model outputs smooth, well-calibrated confidence scores. This continuous score distribution allows us to define precise, level-by-level thresholds ($[0, 0.30)$, $[0.30, 0.50)$, $[0.50, 0.65)$, $[0.65, 0.80)$, $[0.80, 1.00]$) mapping model confidence directly into five distinct visual danger classes.
+
+\section{Probability Calibration and Video Inference}
+
+Out-of-fold isotonic regression calibration (5-fold stratified CV) transforms raw ensemble outputs into true empirical probabilities representing danger risk $y \in [0, 1]$. During video inference, candidate Suppressor partners within an oriented spatial ellipse (15\,m ahead, 8\,m sideways) are evaluated per Aggressor vehicle. Stationary vehicles ($< 0.5$\,m/s over 6\,s) are excluded. Table~\ref{tab:danger_levels} defines the level-by-level confidence score mapping and visual rendering rules.
+
+\begin{table}[H]
+\centering
+\caption{Danger level mapping, visual rendering colours, and temporal visual memory.}
+\label{tab:danger_levels}
+\begin{tabular}{l c c l}
+\toprule
+\textbf{Danger Level} & \textbf{Calibrated Score Range} & \textbf{Bounding Box Colour} & \textbf{Visual Memory} \\
+\midrule
+Level 0 -- Safe             & $[0.00, 0.30)$ & Unannotated & -- \\
+Level 1 -- Nearly Safe      & $[0.30, 0.50)$ & Unannotated & -- \\
+Level 2 -- Nearly Dangerous & $[0.50, 0.65)$ & Yellow      & 25 frames ($\approx 0.8$\,s) \\
+Level 3 -- Dangerous        & $[0.65, 0.80)$ & Orange      & 50 frames ($\approx 1.7$\,s) \\
+Level 4 -- Highly Dangerous & $[0.80, 1.00]$ & Red         & 75 frames ($\approx 2.5$\,s) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Visual memory retains bounding-box highlights for a fixed frame duration, ensuring fleeting conflicts remain easily observable during manual video inspection.

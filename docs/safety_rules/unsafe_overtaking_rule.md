@@ -49,7 +49,7 @@ An overtaking maneuver is valid if the following conditions are met in sequence 
 4. **Distance Convergence/Divergence**: The physical distance between the vehicles must decrease as $A$ approaches $B$, and then increase after passing.
 5. **Lateral Displacement**: The lateral offset must change during the maneuver, signifying a steering path change:
    $$\Delta d_{\text{lateral}} = \left| \text{median}(|d_{\text{lateral, post}}|) - \text{median}(|d_{\text{lateral, pre}}|) \right| \ge 0.8\text{ meters}$$
-6. **Location Constraints**: The maneuver must occur inside the outer roundabout boundary ($r_A < 14.0$ and $r_B < 14.0$).
+6. **Location & Temporal Boundary Constraints**: Both vehicles must be inside the roundabout circulatory ring ($6.0\text{m} \le r \le 14.0\text{m}$) at frame $f - 20$ (20 frames before passing), frame $f$ (passing frame), and frame $f + 20$ (20 frames after passing).
 
 ---
 

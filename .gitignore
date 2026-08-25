@@ -39,6 +39,9 @@ yolov8*.pt
 !outputs/safety_v4/*conflict_annotated.mp4
 !outputs/safety_v4_events/*conflict_annotated.mp4
 
+# Data & frames
+data/
+
 # Generated outputs & logs
 outputs/csv/
 outputs/video/

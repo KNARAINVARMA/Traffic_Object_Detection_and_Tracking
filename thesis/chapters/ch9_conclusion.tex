@@ -1,0 +1,23 @@
+\chapter{Conclusion}
+\label{chap:conclusion}
+
+This thesis presented a comprehensive end-to-end system for automated traffic safety analysis from aerial drone footage of an unsignalized Indian roundabout intersection.
+
+The primary contributions and conclusions are summarized below:
+\begin{enumerate}
+    \item \textbf{High-Recall Aerial Detection and Tracking:} Combining SAHI sliced inference with a DINO-style RT-DETRv2-X backbone
+          and an appearance-augmented ByteTrack algorithm addresses the challenges of small object scale and dense vehicle clustering,
+          achieving an overall tracking IDF1 of 73.27\%.
+    \item \textbf{Ground-Truthed World Coordinate Mapping:} Performing direct physical measurements at the intersection using a laser distance
+          meter established an empirical scale calibration ($s \approx 0.0824$ m/px), allowing pixel trajectories to be transformed into
+          metrically accurate spatial representations.
+    \item \textbf{Deterministic Safety Rule Engine:} Five domain-specific safety rules (tailgating, wrong-way driving, erratic lane weaving,
+          unsafe overtaking, and vehicle stoppage) were formulated and evaluated in world coordinates, providing interpretable safety metrics
+          and automated infraction records.
+    \item \textbf{Hybrid Machine Learning Conflict Predictor:} Combining rule-engine violation outputs with manually annotated dangerous traffic
+          events produced a balanced 3,652-pair training dataset. A calibrated Random Forest regressor utilizing 27-dimensional spatiotemporal
+          kinematic features achieved 96.60\% cross-validation F1-score under 80-20 CV (and 96.19\% under 70-30 shuffle split), demonstrating consistent model performance across data partitioning strategies, along with a calibrated Brier score of 0.0847.
+\end{enumerate}
+
+The resulting framework demonstrates that drone video, combined with physical field calibration, rule-based reasoning, and machine learning,
+can provide automated, objective, and detailed traffic safety intelligence for complex unsignalized intersections.

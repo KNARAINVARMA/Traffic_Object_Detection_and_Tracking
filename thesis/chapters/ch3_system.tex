@@ -1,0 +1,149 @@
+\chapter{Proposed System Architecture}
+\label{chap:proposed}
+
+\section{Overview}
+
+The project is structured as a sequential, multi-stage pipeline in which raw drone video is transformed into metric trajectories, evaluated across five explicit safety rules, combined with manual annotations, and classified by a calibrated machine learning model. Figure~\ref{fig:system_arch} presents the complete detailed system architecture on a dedicated page as a clean vertical flowchart, explicitly detailing key algorithmic configurations, parameters, and data flows across all pipeline stages.
+
+\clearpage
+\begin{figure}[p]
+\centering
+\begin{tikzpicture}[
+    node distance   = 0.38cm and 0cm,
+    stepbox/.style  = {rectangle, draw=blue!60!black, fill=blue!8, rounded corners=4pt, text width=12.5cm,
+                       text centered, align=center, font=\small, inner sep=5pt},
+    greenbox/.style = {rectangle, draw=green!60!black, fill=green!12, rounded corners=4pt, text width=12.5cm,
+                       text centered, align=center, font=\small, inner sep=5pt},
+    orangebox/.style= {rectangle, draw=orange!70!black, fill=orange!12, rounded corners=4pt, text width=12.5cm,
+                       text centered, align=center, font=\small, inner sep=5pt},
+    redbox/.style   = {rectangle, draw=red!70!black, fill=red!12, rounded corners=4pt, text width=12.5cm,
+                       text centered, align=center, font=\small, inner sep=5pt},
+    rsub/.style     = {rectangle, draw=red!50!black, fill=red!5, rounded corners=3pt, text width=11.5cm,
+                       text centered, align=center, font=\scriptsize, inner sep=3.5pt},
+    purplebox/.style= {rectangle, draw=purple!70!black, fill=purple!10, rounded corners=4pt, text width=12.5cm,
+                       text centered, align=center, font=\small, inner sep=5pt},
+    yellowbox/.style= {rectangle, draw=yellow!70!black, fill=yellow!18, rounded corners=4pt, text width=12.5cm,
+                       text centered, align=center, font=\small, inner sep=5pt},
+    graybox/.style  = {rectangle, draw=gray!70!black, fill=gray!15, rounded corners=4pt, text width=12.5cm,
+                       text centered, align=center, font=\small, inner sep=5pt},
+    arr/.style      = {->, thick, >=stealth}
+]
+
+% Step 1
+\node[stepbox] (vid) {
+    \textbf{STEP 1 — Overhead Traffic Video Input} \\
+    {\scriptsize High-Resolution Aerial Drone Footage @ 30 FPS}
+};
+
+% Step 2
+\node[greenbox, below=0.38cm of vid] (det) {
+    \textbf{STEP 2 — Object Detection (SAHI + RT-DETRv2-X)} \\
+    {\scriptsize DINO CDN Decoder, Tile $384\times384$, Overlap $0.75$, WBF $45$\,px / IoU $0.30$}
+};
+
+% Step 3
+\node[greenbox, below=0.38cm of det] (trk) {
+    \textbf{STEP 3 — Multi-Object Tracking (ByteTrack)} \\
+    {\scriptsize $\text{conf}_{\text{high}}=0.5$, DIoU + 128-d ResNet50 ReID + 512-bin HSV, EMA $\alpha=0.9$, SMA $W=7$}
+};
+
+% Step 4
+\node[greenbox, below=0.38cm of trk] (cal) {
+    \textbf{STEP 4 — World-Coordinate Calibration} \\
+    {\scriptsize Physical Laser Field Measurement: $7.0$\,m lane = $85$\,px $\Rightarrow s \approx 0.0824$\,m/px}
+};
+
+% Step 5
+\node[orangebox, below=0.38cm of cal] (traj) {
+    \textbf{STEP 5 — Metric Trajectory Generation} \\
+    {\scriptsize World Coordinates $(x_w, y_w)$ metres, ground speed $v$ m/s, time step $t$}
+};
+
+% Step 6
+\node[redbox, below=0.38cm of traj] (rules) {
+    \textbf{STEP 6 — Safety Rule Engine (Deterministic Evaluation)}
+};
+
+% Sub-rules 1 to 5
+\node[rsub, below=0.28cm of rules] (r1) {
+    Rule 1: Unsafe Overtaking Detection ($\Delta_{ij}$ sign-flip, $d_{ij} \le 4.5$\,m, $\Delta R \le 2.2$\,m)
+};
+\node[rsub, below=0.25cm of r1] (r2) {
+    Rule 2: Tailgating Detection ($d_{\text{arc\_ij}} < 4.0$\,m, $v_i > 1.0$\,m/s in same lane)
+};
+\node[rsub, below=0.25cm of r2] (r3) {
+    Rule 3: Wrong-Way Driving Detection ($\omega_i < -0.1$\,rad/s, $v_i \ge 1.5$\,m/s, $N_{\text{wrong}} \ge 45$)
+};
+\node[rsub, below=0.25cm of r3] (r4) {
+    Rule 4: Erratic Lane Weaving Detection ($\ge 3$ lane boundary transitions in 90 frames)
+};
+\node[rsub, below=0.25cm of r4] (r5) {
+    Rule 5: Vehicle Stoppage Detection ($\Delta d_{90\_i} < 1.0$\,m, $\bar{v}_{90\_i} < 0.8$\,m/s for 90 frames)
+};
+
+% Step 7
+\node[purplebox, below=0.38cm of r5] (dataset) {
+    \textbf{STEP 7 — Hybrid ML Dataset Construction} \\
+    {\scriptsize 3,652 Pairs: Rule Outputs (Tier 2, $w=3/1$) + Manual Annotations (Tier 1, $w=10/3$) + Safe Pairs ($w=1$)}
+};
+
+% Step 8
+\node[yellowbox, below=0.38cm of dataset] (model) {
+    \textbf{STEP 8 — Machine Learning Conflict Prediction Model} \\
+    {\scriptsize Calibrated Random Forest Regressor (300 Trees, Max Depth 10) + 5-Fold Stratified Isotonic Calibration}
+};
+
+% Step 9
+\node[graybox, below=0.38cm of model] (pred) {
+    \textbf{STEP 9 — Multi-Level Safety Classification \& Rendering} \\
+    {\scriptsize Continuous Danger Score $y \in [0, 1] \rightarrow 5$ Visual Tiers (Unannotated, Yellow, Orange, Red) + Visual Memory}
+};
+
+% Connecting Arrows
+\draw[arr] (vid) -- (det);
+\draw[arr] (det) -- (trk);
+\draw[arr] (trk) -- (cal);
+\draw[arr] (cal) -- (traj);
+\draw[arr] (traj) -- (rules);
+\draw[arr] (rules) -- (r1);
+\draw[arr] (r1) -- (r2);
+\draw[arr] (r2) -- (r3);
+\draw[arr] (r3) -- (r4);
+\draw[arr] (r4) -- (r5);
+\draw[arr] (r5) -- (dataset);
+\draw[arr] (dataset) -- (model);
+\draw[arr] (model) -- (pred);
+
+\end{tikzpicture}
+\caption{Detailed vertical end-to-end system architecture. Overhead drone videos are processed through a 9-step vertical pipeline: SAHI + DINO detection, ByteTrack tracking, physical laser calibration, metric trajectory generation, five deterministic safety rules, hybrid dataset construction (combining rule outputs and manual annotations), calibrated Random Forest model training, and multi-level danger classification.}
+\label{fig:system_arch}
+\end{figure}
+\clearpage
+
+\section{Stage Descriptions}
+
+\paragraph{Stage 1 — Object Detection.}
+Each frame from the set of traffic videos is processed by a SAHI-tiled RT-DETRv2-X detector (DINO decoder head with contrastive denoising and multi-scale deformable attention) to produce bounding boxes with associated class labels and confidence scores.
+
+\paragraph{Stage 2 — Object Tracking.}
+A ByteTrack tracker maintains persistent unique identifiers (track IDs) for each road user across successive frames using a two-stage association cascade, 128-d ResNet50 appearance embeddings, 512-bin HSV color histograms, and a simple moving average smoother ($W = 7$).
+
+\paragraph{Stage 3 — World-Coordinate Calibration.}
+Smoothed bounding-box pixel centers $(c_x, c_y)$ are converted to real-world metric coordinates $(x_w, y_w)$ using a uniform scale factor ($s \approx 0.0824$ m/px) derived from physical field measurement of the 7.0 m lane width at the actual intersection using a laser distance meter.
+
+\paragraph{Stage 4 — Safety Rule Engine.}
+The metric trajectory CSV is evaluated across five explicit safety rules in exact priority order: (i)~Unsafe Overtaking Detection, (ii)~Tailgating Detection, (iii)~Wrong-Way Driving Detection, (iv)~Erratic Lane Weaving Detection, and (v)~Vehicle Stoppage Detection. The rules export structured violation records encoding specific traffic infractions.
+
+\paragraph{Stage 5 — ML Dataset Construction and Model Training.}
+The safety rule violation records (automated weak supervision) and manually annotated dangerous traffic events are combined into a three-tier weighted dataset (3,652 interaction pairs). A calibrated Random Forest regressor (300 trees, max depth 10, out-of-fold isotonic calibration) is trained to predict continuous danger scores mapped to five visual danger levels.
+
+\section{Key Design Principles}
+
+\textbf{Separation of trajectory generation from interpretation.}
+The detection-and-tracking component is responsible only for generating accurate, persistent trajectories. All semantic interpretation --- what constitutes dangerous behaviour --- is confined to the rule engine and ML model.
+
+\textbf{Hybrid labelling strategy.}
+The ML training data combines rule-generated labels with manual annotations. Safety rules provide abundant weak supervision, while manual annotations capture complex un-modeled conflicts, yielding a superior hybrid model.
+
+\textbf{Physics-grounded feature representation.}
+All safety rules, ML features, and evaluation metrics operate on metric world coordinates grounded in physical laser field measurements.

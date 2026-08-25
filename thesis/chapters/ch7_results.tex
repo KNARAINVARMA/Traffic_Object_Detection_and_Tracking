@@ -1,0 +1,142 @@
+\chapter{Results and Evaluation}
+\label{chap:results}
+
+\section{Detection and Tracking Pipeline Performance}
+
+The detection and tracking framework (SAHI + DINO detection backbone combined with ByteTrack and appearance feature prototype matching) was evaluated against manual CVAT bounding-box annotations across representative segments from the set of traffic videos.
+
+\begin{table}[H]
+\centering
+\caption{Tracking evaluation metrics on the annotated video segment.}
+\label{tab:tracking_metrics}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Class} & \textbf{MOTA} & \textbf{IDF1} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} \\
+\midrule
+\textbf{Overall} & 55.81\% & 73.27\% & 0.855 & 0.673 & 0.753 \\
+Person           & 60.04\% & 77.76\% & 0.809 & 0.786 & 0.797 \\
+Car              & 40.02\% & 61.66\% & 0.848 & 0.488 & 0.619 \\
+Motorcycle       &  5.46\% & 47.67\% & 0.532 & 0.456 & 0.491 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Key observations:
+\begin{itemize}
+    \item The overall IDF1 score of 73.27\% verifies that the tracking pipeline maintains stable identity preservation across severe occlusions, providing reliable metric trajectories for downstream safety evaluation.
+    \item Pedestrian tracking achieves the highest performance (IDF1 77.76\%), benefiting from distinctive appearance features and minimal mutual occlusion compared to motorized vehicles.
+    \item Motorcycle tracking yields lower MOTA (5.46\%) and IDF1 (47.67\%), caused by visual similarity, small pixel surface area, and dense clustering typical of Indian roundabout traffic.
+\end{itemize}
+
+\section{Safety Rule Engine Evaluation}
+
+The deterministic safety rules were evaluated on 600 vehicle-level observations captured from 1-minute video footage recorded at 30 FPS. Table~\ref{tab:safety_rule_full_eval} reports the complete confusion-matrix counts and derived performance metrics for Wrong-Way Driving Detection and Tailgating Detection.
+
+\begin{table}[H]
+\centering
+\caption{Safety rule evaluation metrics for 1-minute video footage ($\approx 600$ observations).}
+\label{tab:safety_rule_full_eval}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Metric} & \textbf{Wrong-Way Detection} & \textbf{Tailgating Detection} \\
+\midrule
+True Positive (TP) & 18 & 17 \\
+False Positive (FP) & 6 & 19 \\
+False Negative (FN) & 12 & 9 \\
+True Negative (TN) & 564 & 555 \\
+\midrule
+Total Observations & 600 & 600 \\
+Actual Positives ($\text{TP}+\text{FN}$) & 30 & 26 \\
+Predicted Positives ($\text{TP}+\text{FP}$) & 24 & 36 \\
+Actual Negatives ($\text{TN}+\text{FP}$) & 570 & 574 \\
+\midrule
+\textbf{Precision} & \textbf{75.00\%} & \textbf{47.22\%} \\
+\textbf{Recall / Sensitivity} & \textbf{60.00\%} & \textbf{65.38\%} \\
+\textbf{F1-Score} & \textbf{66.67\%} & \textbf{54.84\%} \\
+Accuracy & 97.00\% & 95.33\% \\
+Specificity & 98.95\% & 96.69\% \\
+\textbf{False Positive Rate (FPR)} & \textbf{1.05\%} & \textbf{3.31\%} \\
+\textbf{False Negative Rate (FNR)} & \textbf{40.00\%} & \textbf{34.62\%} \\
+Negative Predictive Value (NPV) & 97.92\% & 98.40\% \\
+Balanced Accuracy & 79.47\% & 81.04\% \\
+Jaccard / IoU & 50.00\% & 37.78\% \\
+Matthews Correlation Coefficient (MCC) & 0.656 & 0.532 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Analysis of Primary Metrics}
+
+\paragraph{Class Imbalance and Accuracy Interpretation.}
+Because safety infractions constitute a minor fraction of overall traffic flow ($30$ actual wrong-way events and $26$ actual tailgating events out of 600 observations), the dataset exhibits class imbalance. Consequently, global Accuracy ($97.00\%$ for Wrong-Way and $95.33\%$ for Tailgating) is heavily influenced by the large number of True Negatives. Performance evaluation therefore focuses primarily on Precision, Recall, F1-Score, FPR, and FNR.
+
+\paragraph{Precision.}
+Wrong-Way Detection achieves a significantly higher Precision of \textbf{75.00\%} compared to \textbf{47.22\%} for Tailgating Detection. When the system flags a wrong-way entry, three out of four alerts correspond to actual counter-directional violations, whereas tailgating alerts generate more frequent false positives due to transient decelerations in crowded lanes.
+
+\paragraph{Recall and Sensitivity.}
+Tailgating Detection yields a slightly higher Recall of \textbf{65.38\%} (17 out of 26 events detected) than Wrong-Way Detection at \textbf{60.00\%} (18 out of 30 events detected). This indicates that tailgating detection captures a slightly greater proportion of actual physical follow-distance breaches.
+
+\paragraph{F1-Score and Overall Trade-Off.}
+The F1-Score balances Precision and Recall:
+\begin{equation}
+    \text{F1} = 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}
+\end{equation}
+Wrong-Way Detection achieves a superior overall F1-Score of \textbf{66.67\%} compared to \textbf{54.84\%} for Tailgating Detection. Furthermore, Wrong-Way Detection maintains a very low False Positive Rate ($\text{FPR} = 1.05\%$), minimizing unnecessary driver alerts, whereas Tailgating Detection exhibits a higher false alarm rate ($\text{FPR} = 3.31\%$). Overall, Wrong-Way Detection demonstrates the stronger precision--recall balance, while Tailgating Detection offers higher sensitivity at the expense of increased false alarms.
+
+In addition to rule evaluation, quantitative recall was evaluated for the Unsafe Overtaking rule against 38 manually annotated overtaking events, detecting 22 pairs (\textbf{57.9\% recall}), with unflagged events primarily corresponding to gradual maneuvers extending beyond the 10-frame window.
+
+\section{Machine Learning Conflict Prediction Results}
+
+The Random Forest conflict prediction model operates within the end-to-end project pipeline:
+\begin{align*}
+&\text{Set of Traffic Videos} \rightarrow \text{SAHI + DINO Detection} \rightarrow \text{ByteTrack Tracking} \\
+&\rightarrow \text{Metric Trajectories} \rightarrow \text{Safety Rule Engine} \\
+&\rightarrow \text{Hybrid Dataset (Rules + Annotations)} \rightarrow \text{Random Forest Model}
+\end{align*}
+
+The model was evaluated using two validation strategies:
+\begin{enumerate}
+    \item \textbf{5-Fold Stratified Cross-Validation (80-20 Split):} The dataset is partitioned into 5 folds with an 80\% training and 20\% testing proportion per fold.
+    \item \textbf{Stratified Shuffle Split (70-30 Split):} Configured explicitly as a 70\% training and 30\% testing split across 5 independent iterations.
+\end{enumerate}
+
+Table~\ref{tab:ml_validation_comparison} presents the experimental results across both validation configurations.
+
+\begin{table}[H]
+\centering
+\caption{ML model experimental results under 80-20 5-Fold Cross-Validation and 70-30 Stratified Shuffle Split.}
+\label{tab:ml_validation_comparison}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Metric} & \textbf{80-20 Split (5-Fold CV)} & \textbf{70-30 Split (Shuffle Split)} & \textbf{Change} \\
+\midrule
+Accuracy (ACC) & 94.11\% $\pm$ 1.13\% & 93.43\% $\pm$ 1.33\% & -0.68\% \\
+Precision      & 97.84\% $\pm$ 0.45\% & 97.81\% $\pm$ 0.32\% & -0.03\% \\
+Recall         & 95.41\% $\pm$ 1.26\% & 94.64\% $\pm$ 1.29\% & -0.77\% \\
+F1 Score       & 0.9660 $\pm$ 0.0068  & 0.9619 $\pm$ 0.0079  & -0.0041 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Expanded Academic Interpretation}
+
+\paragraph{Accuracy.}
+The Random Forest model achieves an Accuracy of $94.11\% \pm 1.13\%$ under the 80-20 cross-validation setting and $93.43\% \pm 1.33\%$ under the 70-30 shuffle-split setting. The relatively small decrease of 0.68 percentage points indicates that overall classification performance remains consistent when the training/testing proportion is changed.
+
+\paragraph{Precision.}
+Precision remains consistently high across both validation strategies ($97.84\% \pm 0.45\%$ under 80-20 CV vs $97.81\% \pm 0.32\%$ under 70-30 Shuffle Split). The high precision indicates a low proportion of false-positive classifications within the evaluated test partitions. High precision is particularly valuable in traffic-safety analysis because excessive false-positive alerts can reduce the usefulness of an automated safety-monitoring system and potentially cause alert fatigue among safety operators.
+
+\paragraph{Recall.}
+Recall represents the proportion of true dangerous traffic interactions successfully identified by the model ($95.41\% \pm 1.26\%$ under 80-20 CV vs $94.64\% \pm 1.29\%$ under 70-30 Shuffle Split). Recall is slightly lower than precision, indicating that a small fraction of dangerous instances remain difficult for the model to identify. This distinction is important in safety analysis because false negatives correspond to dangerous traffic situations that remain undetected by the classifier.
+
+\paragraph{F1 Score.}
+The model achieves high F1 scores of $0.9660 \pm 0.0068$ under 80-20 CV and $0.9619 \pm 0.0079$ under 70-30 Shuffle Split, demonstrating a strong harmonic balance between precision and recall. The decrease of only 0.0041 indicates that the model maintains a similar precision-recall balance across both evaluated validation configurations.
+
+\paragraph{Evaluation of Training Set Size Sensitivity (80-20 vs 70-30 Difference).}
+Comparing the 80-20 cross-validation and 70-30 shuffle-split results reveals minimal performance shifts: Accuracy changes by $-0.68$ percentage points, Precision by $-0.03$ percentage points, Recall by $-0.77$ percentage points, and F1 Score by $-0.0041$. In particular, precision changes by only 0.03 percentage points and F1 score by only 0.0041. The limited performance degradation observed when reducing the training proportion suggests that the model has learned stable patterns from the available traffic features and does not exhibit substantial sensitivity to the evaluated change in training-set size.
+
+\paragraph{Variability and Standard Deviation.}
+The experimental results are reported as Mean $\pm$ Standard Deviation across five evaluated folds/iterations, where the mean represents average performance and the standard deviation reflects performance variation across evaluations. The reported standard deviations are relatively small: Accuracy varies by approximately 1.1--1.3 percentage points, Precision remains below 0.5 percentage points, Recall varies by approximately 1.3 percentage points, and F1 score variation remains below 0.01. The relatively low variation across the evaluated splits provides evidence of stable model performance under the tested validation configurations.
+
+\paragraph{Probability Calibration Results.}
+In addition to classification performance, probability calibration was evaluated using the Brier Score. Out-of-fold isotonic calibration improved the Brier Score from 0.0935 (uncalibrated) to 0.0847 (calibrated), representing a 9.4\% relative improvement and verifying that calibrated outputs closely track empirical collision probabilities.

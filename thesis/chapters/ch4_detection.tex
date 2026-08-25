@@ -1,0 +1,200 @@
+\chapter{Detection, Tracking, and Trajectory Generation}
+\label{chap:detection}
+
+\section{Overview}
+
+This chapter describes how the system transforms raw drone video into structured metric
+trajectories.  The output of this stage --- a CSV file containing one row per
+(frame, track\_id) pair with real-world coordinates and velocity --- is the primary input
+to all subsequent stages.
+
+\section{Object Detection}
+
+\subsection{RT-DETRv2-X with DINO Decoder (Detection Backbone)}
+
+The detection backbone is RT-DETRv2-X, an Extra-Large variant of the Real-Time Detection
+Transformer that retains the DINO (DETR with Improved deNoising Optimisation) decoder head.
+The DINO decoder incorporates two mechanisms that are particularly beneficial for dense
+Indian traffic:
+
+\begin{itemize}
+    \item \textbf{Contrastive denoising training (CDN):}
+          During training, each object query learns to distinguish clean anchor assignments
+          from noisy ones.  The result is tighter, more calibrated confidence scores
+          per frame.  When two overlapping tiles detect the same motorcycle, the
+          DINO-calibrated scores are close to each other (e.g.\ 0.60 and 0.59) rather than
+          arbitrarily divergent (e.g.\ 0.82 and 0.43), which makes the downstream
+          Weighted Box Fusion step far more reliable.
+
+    \item \textbf{Multi-scale deformable attention:}
+          The encoder explicitly attends to feature maps at four scales (P3--P6),
+          enabling simultaneous detection of small motorcycles ($\approx 20$--50 px) and
+          large buses ($\approx 200$+ px) within the same crowded frame.
+\end{itemize}
+
+Five COCO class IDs are retained: person~(0), car~(2), motorcycle~(3), bus~(5), and
+truck~(7).  A global confidence threshold of $\text{conf} = 0.10$ is used at the SAHI
+level; class-specific thresholds are applied in a separate post-processing step.
+
+\subsection{Why DINO: Architectural Intuition and Choice Rationale}
+
+Standard object detectors present clear trade-offs when applied to high-altitude aerial drone video:
+\begin{itemize}
+    \item \textbf{CNN Backbones (YOLOv8 / Faster R-CNN):} Traditional one-stage CNN detectors downsample feature maps by $32\times$, causing small two-wheelers ($< 32 \times 32$ pixels) to lose spatial activation. Furthermore, standard NMS produces uncalibrated confidence scores across overlapping image tiles, causing duplicate detections across SAHI sub-tiles to receive wildly divergent scores.
+    \item \textbf{Standard DETR:} Vanilla DETR suffers from slow bipartite matching convergence during training and struggles with multi-scale feature alignment.
+\end{itemize}
+
+RT-DETRv2-X with a DINO decoder was chosen to address these specific failure modes:
+\begin{enumerate}
+    \item \textbf{Contrastive Denoising Training (CDN):} DINO explicitly trains decoder queries against contrastive noisy bounding-box anchors. This produces tightly calibrated confidence scores per frame, ensuring that duplicate detections across adjacent SAHI tiles yield consistent confidence scores (e.g., $0.60$ vs $0.59$), which enables smooth Weighted Box Fusion (WBF) deduplication.
+    \item \textbf{Deformable Multi-Scale Attention:} The DINO encoder samples feature maps across four resolution scales (P3--P6) simultaneously, enabling high-recall detection of small two-wheelers ($20$--$50$\,px) and large buses ($>200$\,px) within dense, un-lane-disciplined traffic streams.
+\end{enumerate}
+
+\subsection{SAHI Tiling}
+
+Standard inference on a full drone frame at the native resolution causes vehicles to
+subtend very few pixels in the network's input tensor after downsampling.  SAHI (Slicing
+Aided Hyper Inference) resolves this by dividing the frame into overlapping tiles before
+inference, so that small vehicles appear at a much higher relative resolution.
+
+The detector is wrapped in the \texttt{SahiDinoDetector} class
+(\texttt{sahi\_dino\_detection.py}).  The tiling configuration used is:
+\begin{itemize}
+    \item Tile size: $384 \times 384$ pixels
+    \item Overlap ratio: 0.75 (both dimensions)
+    \item Post-SAHI fusion: Weighted Box Fusion (WBF) with cluster distance 45 px and
+          IoU threshold 0.30
+\end{itemize}
+
+\subsection{Weighted Box Fusion}
+
+After SAHI assembles predictions from all tiles, the \texttt{weighted\_box\_fusion()}
+function (\texttt{sahi\_fusion.py}) is applied as a second deduplication pass beyond
+SAHI's built-in NMS.  This eliminates low-IoU duplicate detections in the
+$0.22$--$0.33$ IoU range that bypass standard NMS thresholds but would otherwise confuse
+the ByteTrack Stage-1 matching.
+
+\section{Object Tracking}
+
+\subsection{ByteTrack}
+
+The tracker (\texttt{tracker.py}) follows the ByteTrack framework~\cite{bytetrack}.
+The per-frame update proceeds in two stages:
+
+\begin{enumerate}
+    \item \textbf{Stage 1:}
+          High-confidence detections ($\text{conf} \geq 0.5$) are associated with all
+          currently Tracked and recently Lost tracks using a cost matrix combining DIoU
+          and appearance distance.  The Hungarian algorithm finds the minimum-cost
+          assignment.
+
+    \item \textbf{Stage 2:}
+          Low-confidence detections are given a second attempt to associate with the tracks
+          that remained unmatched after Stage~1.  This recovers tracks for partially occluded
+          vehicles whose detection confidence has dropped temporarily.
+\end{enumerate}
+
+Each track maintains a constant-velocity Kalman filter with 8-dimensional state
+$[c_x, c_y, w, h, \dot{c}_x, \dot{c}_y, \dot{w}, \dot{h}]^\top$, where $(c_x, c_y)$ is
+the box centre and $(w, h)$ is its size.  Process noise is scaled proportionally to the
+bounding-box area so that larger vehicles receive higher noise, reflecting their larger
+absolute displacements.
+
+\subsection{Appearance Feature Matching}
+
+To reduce identity switches during occlusion, each bounding-box crop is processed by an appearance feature extractor (\texttt{reid.py}), which produces a 128-dimensional embedding using a ResNet50 backbone (classification head replaced by a linear projection).  A 512-bin 3-D HSV colour histogram is appended to improve discrimination of visually similar vehicles. Each track maintains an exponential moving-average appearance prototype:
+\begin{equation}
+    \hat{\mathbf{e}}_t = \alpha\,\hat{\mathbf{e}}_{t-1} + (1-\alpha)\,\mathbf{e}_t,
+    \qquad \alpha = 0.9
+    \label{eq:ema}
+\end{equation}
+Cosine distance between prototypes supplements the IoU cost in Stage-1 matching.
+
+\subsection{Trajectory Smoothing}
+
+The bounding-box centres exported per frame still carry quantisation noise and
+detection jitter even after Kalman filtering.  The \texttt{MovingAverageSmoother}
+(\texttt{smoothing.py}) applies a per-track simple moving average with window $W = 7$
+frames:
+\begin{equation}
+    \tilde{c}(t) = \frac{1}{W}\sum_{k=0}^{W-1} c(t-k)
+    \label{eq:sma}
+\end{equation}
+This introduces a maximum lag of 3 frames ($\approx 100$ ms at 30 FPS), which is negligible
+relative to the safety-rule evaluation windows (90--1500 frames).
+
+\section{World-Coordinate Calibration}
+\label{sec:calibration}
+
+\subsection{Motivation}
+
+Pixel coordinates do not carry physical meaning.  A separation of 50 pixels between two
+vehicle centres could correspond to 2 m or 20 m depending on the camera altitude, focal
+length, and tilt.  Since all safety rules and ML features are defined in metres and metres
+per second, a calibrated pixel-to-metre mapping is an essential prerequisite.
+
+\subsection{Physical Measurement Procedure}
+
+The calibration is grounded in a direct physical measurement of the roundabout.  The team
+visited the actual intersection and measured the lane width perpendicular to the
+circulatory direction using a laser measuring device.  The measured lane width is
+$L_{\text{real}} = 7.0$ m.
+
+The pixel extent of the same lane boundary was measured in the drone video frame using the
+interactive calibration tool (\texttt{interactive\_calibration.py}), which allows the user
+to click two points on the video frame and computes the pixel distance.  The measured
+pixel span of the 7.0 m lane width is $L_{\text{px}} = 85$ pixels.
+
+The uniform scale factor is therefore:
+\begin{equation}
+    s = \frac{L_{\text{real}}}{L_{\text{px}}} = \frac{7.0}{85} \approx 0.0824\;\text{m/px}
+    \label{eq:scale}
+\end{equation}
+
+\subsection{Coordinate Transformation}
+
+Each smoothed bounding-box pixel centre $(c_x, c_y)$ is converted to world coordinates
+$(x_w, y_w)$ by applying the uniform scale factor:
+\begin{equation}
+    x_w = c_x \cdot s, \qquad y_w = c_y \cdot s
+    \label{eq:world}
+\end{equation}
+
+The roundabout centre in world coordinates, computed by applying the same scale to the
+pixel-space centre $(870, 570)$, is:
+\begin{equation}
+    (X_C, Y_C) = (870 \cdot s,\; 570 \cdot s) \approx (43.5,\; 28.5)\;\text{m}
+    \label{eq:centre}
+\end{equation}
+
+The inner circulatory boundary ($120\,\text{px} \times s$) is $R_{\text{inner}} \approx 6.0$ m
+and the outer boundary ($280\,\text{px} \times s$) is $R_{\text{outer}} \approx 14.0$ m.
+
+Per-frame velocity is estimated as:
+\begin{equation}
+    v(t) = \sqrt{(x_w(t) - x_w(t{-}1))^2 + (y_w(t) - y_w(t{-}1))^2} \times f_{\text{ps}}
+    \label{eq:velocity}
+\end{equation}
+where $f_{\text{ps}} = 30$ FPS.
+
+\section{Output CSV Schema}
+
+\begin{table}[H]
+\centering
+\caption{Tracking pipeline output CSV column schema.}
+\label{tab:csv_schema}
+\begin{tabular}{lll}
+\toprule
+\textbf{Column} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{frame}              & int   & 0-based video frame index \\
+\texttt{track\_id}          & int   & Persistent unique identifier \\
+\texttt{class\_name}        & str   & Road-user class (car, motorcycle, \ldots) \\
+\texttt{x1, y1, x2, y2}    & float & Bounding box in pixel coordinates \\
+\texttt{center\_x, center\_y} & float & Smoothed pixel centre \\
+\texttt{world\_x, world\_y}   & float & World coordinates (metres) \\
+\texttt{confidence}         & float & Detector score $\in [0,1]$ \\
+\texttt{velocity\_ms}       & float & Estimated ground speed (m/s) \\
+\bottomrule
+\end{tabular}
+\end{table}

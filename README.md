@@ -161,6 +161,8 @@ The pipeline includes a dedicated `src/safety/` module designed to ingest the ou
 - **Safe Space Rule (`safe_space_rule.py`):** Computes leading distance between consecutive vehicles; flags tailgating violations based on vehicle class dynamics.
 - **Wrong-Way Driving (`wrong_way_rule.py`):** Calculates trajectory heading against mapped lane polygons to detect counter-clockwise flow violations.
 - **Erratic Lane Weaving (`jittering_rule.py`):** Tracks physical boundary crosses inside the roundabout to flag unsafe swerving maneuvers.
+- **Unsafe Overtaking (`overtaking.py`):** Monitors relative polar angle sign-flips and spatial proximity filtering ($d \le 4.5\text{m}$, $\Delta r \le 2.2\text{m}$) to detect high-risk overtaking maneuvers.
+- **Vehicle Stoppage (`stoppage.py`):** Detects vehicles in the circulating ring maintaining a 90-frame (3s) spatial displacement $< 1.0\text{m}$ and rolling mean speed $< 0.8\text{ m/s}$ with bounding box deduplication.
 
 **Machine Learning Safety Model (`ML Model/`):**
 
@@ -324,7 +326,9 @@ Traffic_Object_Detection_and_Tracking/
         ├── csv_outputs/       ← Output raw safety violations
         ├── visualizations/    ← Image snapshots of violations
         ├── jittering_rule.py  ← Erratic lane weaving detection
+        ├── overtaking.py      ← Unsafe overtaking detection rule
         ├── safe_space_rule.py ← Tailgating detection
+        ├── stoppage.py        ← Vehicle stoppage detection rule
         ├── wrong_way_rule.py  ← Counter-clockwise driving detection
         └── zone.py            ← Intersection geometric utility
 ```
